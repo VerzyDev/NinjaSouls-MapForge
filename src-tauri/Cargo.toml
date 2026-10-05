@@ -1,0 +1,41 @@
+[package]
+name = "map-forge"
+version = "0.2.0"
+description = "A Tibia OTBM map editor"
+edition = "2021"
+
+[lib]
+name = "map_forge_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+default = ["tibia"]
+tibia = []
+bpak = []
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+tauri-plugin-mcp-bridge = "0.11"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_bytes = "0.11"
+rayon = "1.10"
+lz4_flex = { version = "0.11", features = ["frame"] }
+image = "0.24"
+roxmltree = "0.20"
+notify = "6"
+mlua = { version = "0.10", features = ["luajit", "vendored", "send"] }
+flate2 = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+window-vibrancy = "0.7"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+window-vibrancy = "0.7"

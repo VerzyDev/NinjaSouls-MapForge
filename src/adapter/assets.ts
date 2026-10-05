@@ -1,0 +1,251 @@
+import { invoke } from '@tauri-apps/api/core';
+
+import { Thing } from '~/domain/thing';
+import { ThingType } from '~/domain/tibia';
+import { CreatureLook } from '~/domain/creature';
+import { loadCreatureDb } from '~/adapter/creatures';
+import { CLIENT_VERSIONS } from '~/lib/formats/tibia/types';
+import { decodeDatResponse } from '~/lib/formats/tibia/datDecoder';
+
+export const DEFAULT_VERSION = 860;
+export const DATA_DIR_KEY = 'dataDir';
+
+let cachedDataDir = '';
+
+export async function initDataDir(version = DEFAULT_VERSION): Promise<string> {
+  cachedDataDir = await invoke<string>('project_data_dir', { version });
+  return cachedDataDir;
+}
+
+export async function defaultDataRoot(): Promise<string> {
+  return invoke<string>('default_data_root');
+}
+
+export async function copyDataDir(from: string, to: string): Promise<void> {
+  await invoke('copy_data_dir', { from, to });
+}
+
+export function defaultDataDir(): string {
+  return cachedDataDir;
+}
+
+export async function openDataDir(path: string): Promise<void> {
+  await invoke('open_data_dir', { path });
+}
+
+export async function openUrl(url: string): Promise<void> {
+  await invoke('open_url', { url });
+}
+
+const SPAWN_MARKER_SERVER_ID = 1507;
+const WAYPOINT_MARKER_SERVER_ID = 1397;
+
+export interface LoadedAssets {
+  items: Map<number, Thing>;
+  outfits: Map<number, ThingType>;
+  itemNames: Map<number, string>;
+  creatures: Map<string, CreatureLook>;
+  spawnMarkerClientId: number;
+  waypointMarkerClientId: number;
+  sprPath: string;
+  transparency: boolean;
+  spritesCount: number;
+  otbItemCount: number;
+  spriteSize: number;
+}
+
+export async function mapClientIds(serverIds: number[]): Promise<number[]> {
+  if (serverIds.length === 0) return [];
+  return invoke<number[]>('map_client_ids', { serverIds });
+}
+
+interface OtfiFlags {
+  extended: boolean;
+  transparency: boolean;
+  frameDurations: boolean;
+  frameGroups: boolean;
+  metadataFile: string;
+  spritesFile: string;
+}
+
+function parseOtfi(content: string): Partial<OtfiFlags> {
+  const out: Record<string, string> = {};
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    const colon = trimmed.indexOf(':');
+    if (colon <= 0) continue;
+    out[trimmed.slice(0, colon).trim()] = trimmed.slice(colon + 1).trim();
+  }
+  return {
+    extended: out['extended'] === 'true',
+    transparency: out['transparency'] === 'true',
+    frameDurations: out['frame-durations'] === 'true',
+    frameGroups: out['frame-groups'] === 'true',
+    metadataFile: out['metadata-file'] || undefined,
+    spritesFile: out['sprites-file'] || undefined
+  };
+}
+
+async function readOtfi(dir: string): Promise<Partial<OtfiFlags>> {
+  try {
+    const content = await invoke<string>('read_file_text', { path: `${dir}/Tibia.otfi` });
+    return parseOtfi(content);
+  } catch {
+    return {};
+  }
+}
+
+export async function loadItemNamesPath(path: string): Promise<Map<number, string>> {
+  const names = new Map<number, string>();
+  let content: string;
+  try {
+    content = await invoke<string>('read_file_text', { path });
+  } catch {
+    return names;
+  }
+  const re = /<item\s+id="(\d+)"[^>]*\bname="([^"]*)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    names.set(Number(m[1]), m[2]);
+  }
+  return names;
+}
+
+async function loadItemNames(dir: string): Promise<Map<number, string>> {
+  return loadItemNamesPath(`${dir}/items.xml`);
+}
+
+export interface ItemCaps {
+  writable: boolean;
+  container: boolean;
+  teleport: boolean;
+  door: boolean;
+  depot: boolean;
+  fluid: boolean;
+  stackable: boolean;
+  pickupable: boolean;
+  maxTextLen: number;
+}
+
+export async function loadItemCaps(serverIds: number[]): Promise<ItemCaps[]> {
+  if (serverIds.length === 0) return [];
+  return invoke<ItemCaps[]>('item_caps', { serverIds });
+}
+
+export async function loadItemTypes(dir: string): Promise<Map<number, string>> {
+  const types = new Map<number, string>();
+  let content: string;
+  try {
+    content = await invoke<string>('read_file_text', { path: `${dir}/items.xml` });
+  } catch {
+    return types;
+  }
+  const re = /<item\s+([^>]*?)\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    const attrs = m[1];
+    const type = /\btype="([^"]+)"/.exec(attrs)?.[1]?.toLowerCase();
+    if (!type) continue;
+    const single = /\bid="(\d+)"/.exec(attrs)?.[1];
+    if (single) {
+      types.set(Number(single), type);
+      continue;
+    }
+    const from = Number(/\bfromid="(\d+)"/.exec(attrs)?.[1] ?? NaN);
+    const to = Number(/\btoid="(\d+)"/.exec(attrs)?.[1] ?? NaN);
+    if (Number.isNaN(from) || Number.isNaN(to)) continue;
+    for (let id = from; id <= to; id++) types.set(id, type);
+  }
+  return types;
+}
+
+export interface MapItemsPaths {
+  path: string;
+  names: string | null;
+  format: string | null;
+}
+
+export async function resolveMapItems(mapPath: string): Promise<MapItemsPaths | null> {
+  return (await invoke<MapItemsPaths | null>('resolve_items_dir', { mapPath })) ?? null;
+}
+
+export interface OtbmVersionInfo {
+  otbm_version: number;
+  items_major: number;
+  items_minor: number;
+  data_dir: string | null;
+  version: number | null;
+}
+
+export async function peekOtbmVersion(path: string): Promise<OtbmVersionInfo> {
+  return invoke<OtbmVersionInfo>('peek_otbm_version', { path });
+}
+
+export async function loadOtb(path: string): Promise<number> {
+  return invoke<number>('load_otb', { path });
+}
+
+interface RustSprHeader {
+  signature: number;
+  extended: boolean;
+  sprite_count: number;
+  sprite_size: number;
+}
+
+export type ItemSource = 'otb' | 'dat';
+
+export async function loadAssets(
+  dataDir: string,
+  clientDir: string,
+  version = DEFAULT_VERSION,
+  itemSource: ItemSource = 'otb'
+): Promise<LoadedAssets> {
+  const otfi = await readOtfi(clientDir);
+  const extended = otfi.extended ?? CLIENT_VERSIONS.find((c) => c.value === version)?.supportsExtended ?? false;
+  const transparency = otfi.transparency ?? false;
+  const datPath = `${clientDir}/${otfi.metadataFile ?? 'Tibia.dat'}`;
+  const sprPath = `${clientDir}/${otfi.spritesFile ?? 'Tibia.spr'}`;
+  const datFlags = {
+    extended,
+    frameDurations: otfi.frameDurations ?? null,
+    frameGroups: otfi.frameGroups ?? null
+  };
+
+  const otbItemCount =
+    itemSource === 'dat'
+      ? await invoke<number>('load_dat_items', { datPath, dataDir, version, datFlags }).catch((e) => {
+          console.error(`load_dat_items failed for ${datPath}:`, e);
+          return 0;
+        })
+      : await invoke<number>('load_otb', { path: `${dataDir}/items.otb` }).catch((e) => {
+          console.error(`load_otb failed for ${dataDir}/items.otb:`, e);
+          return 0;
+        });
+  await invoke<number>('load_materials', { dataDir }).catch((e) => {
+    console.error(`load_materials failed for ${dataDir}:`, e);
+  });
+  const itemNames = await loadItemNames(dataDir);
+  const creatures = await loadCreatureDb(dataDir);
+  const [spawnMarkerClientId, waypointMarkerClientId] =
+    itemSource === 'otb' && otbItemCount > 0 ? await mapClientIds([SPAWN_MARKER_SERVER_ID, WAYPOINT_MARKER_SERVER_ID]) : [0, 0];
+
+  const datResponse = await invoke<Uint8Array | ArrayBuffer>('parse_dat_file_bin', { path: datPath, version, datFlags });
+  const datBuf = datResponse instanceof Uint8Array ? datResponse : new Uint8Array(datResponse);
+  const dat = decodeDatResponse(datBuf);
+
+  const sprHeader = await invoke<RustSprHeader>('open_spr_file', { path: sprPath, extended });
+
+  return {
+    items: dat.items,
+    outfits: dat.outfits,
+    itemNames,
+    creatures,
+    spawnMarkerClientId: spawnMarkerClientId ?? 0,
+    waypointMarkerClientId: waypointMarkerClientId ?? 0,
+    sprPath,
+    transparency,
+    spritesCount: sprHeader.sprite_count,
+    otbItemCount,
+    spriteSize: sprHeader.sprite_size
+  };
+}
