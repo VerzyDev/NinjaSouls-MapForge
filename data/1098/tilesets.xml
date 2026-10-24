@@ -459,7 +459,8 @@
 			<brush name="city road7"/>
 			<brush name="grey low ground"/>
 			<brush name="broken road"/>
-        </terrain>
+        			<brush name="Sunaroof"/>
+		</terrain>
     </tileset>
 
     <tileset name="Customized Nature">
@@ -480,7 +481,6 @@
 			<brush name="waterfall1"/>
 			<brush name="waterfall2"/>
 			<brush name="waterfall3"/>
-			<brush name="sea1"/>
 			<brush name="sea2"/>
 			<brush name="sea3"/>
 			<brush name="walkable sea3"/>
@@ -517,7 +517,10 @@
 			<brush name="earth2"/>
 			<brush name="suna grass"/>
 			<brush name="suna tile"/>
-        </terrain>
+        			<brush name="sea1"/>
+					<brush name="seakonoha"/>
+					<brush name="mountainroad"/>
+		</terrain>
     </tileset>
 
 	<tileset name="Customized Walls">
@@ -526,7 +529,9 @@
 			<brush name="bamboo palisade"/>
 			<brush name="oramond wall"/>
 			<brush name="termal wall"/>
-        </terrain>
+        			<brush name="Sunawall"/>
+					<brush name="Sunawall2"/>
+		</terrain>
     </tileset>
 
 	<tileset name="Customized Mountain">
@@ -1959,7 +1964,6 @@
 		<brush name="coconut tree"/>
 		<brush name="konoha tree"/>
 		<brush name="konoha tree1"/>
-		<brush name="konoha tree2"/>
 		<brush name="new log"/>
 		<brush name="new log vines"/>
 		<brush name="new log covered in moss"/>

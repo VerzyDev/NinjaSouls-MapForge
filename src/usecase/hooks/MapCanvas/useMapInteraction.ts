@@ -1824,6 +1824,8 @@ export function useMapInteraction(deps: InteractionDeps) {
       console.error('Clipboard ghost capture failed', err);
       clipboardGhostSource.current = null;
     }
+    const ghost = clipboardGhostSource.current;
+    if (ghost?.length === 1 && ghost[0].items.length === 1) copyText(String(ghost[0].items[0].clientId));
     return copySelection(inputs.current.map.id, s.zs, s.xs, s.ys, s.all)
       .then((n) => {
         clipboardCount.current = n;

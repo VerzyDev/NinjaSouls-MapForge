@@ -147,18 +147,18 @@ const TileContextMenu = ({ menu, handlers }: TileContextMenuProps) => {
 
       <SubMenu label="Copy..." openLeft={flipX}>
         <Item label="Copy Position" disabled={!hasSelection} onClick={() => onCopyPosition(tile)} />
-        {item && (
-          <>
-            <Item label="Copy Item Server Id" onClick={() => onCopyText(String(item.serverId))} />
-            <Item label="Copy Item Client Id" onClick={() => onCopyText(String(item.clientId))} />
-            {item.name && <Item label="Copy Item Name" onClick={() => onCopyText(item.name)} />}
-          </>
-        )}
+        {item?.name && <Item label="Copy Item Name" onClick={() => onCopyText(item.name)} />}
       </SubMenu>
 
       <Separator />
       <Item label="Cut" onClick={onCut} shortcut="Ctrl+X" disabled={!hasSelection} />
       <Item label="Copy" onClick={onCopy} shortcut="Ctrl+C" disabled={!hasSelection} />
+      {item && (
+        <>
+          <Item label={`Copy Client Id (${item.clientId})`} onClick={() => onCopyText(String(item.clientId))} />
+          <Item label={`Copy Server Id (${item.serverId})`} onClick={() => onCopyText(String(item.serverId))} />
+        </>
+      )}
       <Item label="Paste" shortcut="Ctrl+V" disabled={!canPaste} onClick={() => onPaste(tile)} />
       <Item label="Delete" shortcut="Del" onClick={onDelete} disabled={!hasSelection} />
 

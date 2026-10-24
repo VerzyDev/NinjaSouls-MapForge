@@ -2657,20 +2657,6 @@
 		<borderitem edge="dnw" item="37587"/>
 	</border>
 
-	<border id="260"> <!-- sea1 border -->
-		<borderitem edge="n"   item="37388"/>
-		<borderitem edge="e"   item="37389"/>
-		<borderitem edge="s"   item="37390"/>
-		<borderitem edge="w"   item="37391"/>
-		<borderitem edge="cnw" item="37396"/>
-		<borderitem edge="cne" item="37397"/>
-		<borderitem edge="csw" item="37398"/>
-		<borderitem edge="cse" item="37399"/>
-		<borderitem edge="dnw" item="37392"/>
-		<borderitem edge="dne" item="37393"/>
-		<borderitem edge="dsw" item="37394"/>
-		<borderitem edge="dse" item="37395"/>
-	</border>
 
 	<border id="261"> <!-- sea2 border -->
 		<borderitem edge="n"   item="37376"/>
@@ -3413,5 +3399,47 @@
 		<borderitem edge="dsw" item="43203"/>
 		<borderitem edge="dne" item="43214"/>
 		<borderitem edge="dnw" item="43213"/>
+	</border>
+	<border id="311">
+		<borderitem edge="n" item="37450"/>
+		<borderitem edge="e" item="37451"/>
+		<borderitem edge="s" item="37452"/>
+		<borderitem edge="w" item="37453"/>
+		<borderitem edge="cnw" item="37458"/>
+		<borderitem edge="cne" item="37459"/>
+		<borderitem edge="csw" item="37460"/>
+		<borderitem edge="cse" item="37461"/>
+		<borderitem edge="dnw" item="37454"/>
+		<borderitem edge="dne" item="37455"/>
+		<borderitem edge="dsw" item="37456"/>
+		<borderitem edge="dse" item="37457"/>
+	</border>
+	<border id="312">
+		<borderitem edge="n" item="42568"/>
+		<borderitem edge="e" item="42570"/>
+		<borderitem edge="s" item="42569"/>
+		<borderitem edge="w" item="42576"/>
+		<borderitem edge="cnw" item="42266"/>
+		<borderitem edge="cne" item="42267"/>
+		<borderitem edge="csw" item="42268"/>
+		<borderitem edge="cse" item="42269"/>
+		<borderitem edge="dnw" item="42577"/>
+		<borderitem edge="dne" item="42578"/>
+		<borderitem edge="dsw" item="42579"/>
+		<borderitem edge="dse" item="42580"/>
+	</border>
+	<border id="313">
+		<borderitem edge="n" item="42297"/>
+		<borderitem edge="e" item="42305"/>
+		<borderitem edge="s" item="42294"/>
+		<borderitem edge="w" item="42306"/>
+		<borderitem edge="cnw" item="42298"/>
+		<borderitem edge="cne" item="42296"/>
+		<borderitem edge="csw" item="42295"/>
+		<borderitem edge="cse" item="42293"/>
+		<borderitem edge="dnw" item="42310"/>
+		<borderitem edge="dne" item="42309"/>
+		<borderitem edge="dsw" item="42308"/>
+		<borderitem edge="dse" item="42307"/>
 	</border>
 </materials>

@@ -5117,14 +5117,11 @@
 		<item id="40965" chance="1"/>
 		<item id="40967" chance="1"/>
 		<item id="40969" chance="1"/>
-	</brush>
-
-	<brush name="konoha tree2" type="doodad" server_lookid="40972" draggable="true" on_blocking="false" thickness="12/100">
-		<item id="40972" chance="1"/>
-		<item id="40966" chance="1"/>
+                <item id="40972" chance="1"/>
 		<item id="40970" chance="1"/>
 		<item id="40971" chance="1"/>
 		<item id="40973" chance="1"/>
+                <item id="40966" chance="1"/>
 	</brush>
 
 	<brush name="savana tree" type="doodad" server_lookid="40949" draggable="true" on_blocking="false" thickness="12/100">

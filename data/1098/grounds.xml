@@ -145,19 +145,6 @@
 		<border align="inner" to="ice" id="48"/>
 	</brush>
 
-	<brush name="sea1" type="ground" server_lookid="37471" z-order="9100">
-		<item id="37471" chance="3"/>
-		<item id="37472" chance="1"/>
-		<item id="37473" chance="1"/>
-		<item id="37474" chance="1"/>
-		<item id="37475" chance="1"/>
-		<item id="37476" chance="1"/>
-		<item id="37477" chance="1"/>
-		<item id="37478" chance="1"/>
-		<item id="37479" chance="1"/>
-
-		<border align="outer" id="260"/>
-	</brush>
 
 	<brush name="sea2" type="ground" server_lookid="37462" z-order="9100">
 		<item id="37462" chance="3"/>
@@ -3212,5 +3199,28 @@
 
     <border align="inner" to="none" id="248"/>
     <border align="outer" id="278"/>
+	</brush>
+	<brush name="sea1" type="ground" server_lookid="37471" z-order="3500">
+		<item id="37472" chance="1000"/>
+		<item id="37473" chance="1000"/>
+		<item id="37476" chance="1000"/>
+		<item id="37477" chance="1000"/>
+		<item id="37478" chance="1000"/>
+		<item id="37479" chance="1000"/>
+		<border align="outer" id="311"/>
+		<border align="outer" to="none" id="311"/>
+	</brush>
+	<brush name="seakonoha" type="ground" server_lookid="42567" z-order="3500">
+		<item id="42567" chance="1000"/>
+		<border align="outer" id="312"/>
+		<border align="outer" to="none" id="312"/>
+	</brush>
+	<brush name="mountainroad" type="ground" server_lookid="39601" z-order="1000">
+		<item id="39601" chance="1000"/>
+	</brush>
+	<brush name="Sunaroof" type="ground" server_lookid="42292" z-order="10000">
+		<item id="42292" chance="1000"/>
+		<border align="outer" id="313"/>
+		<border align="outer" to="none" id="313"/>
 	</brush>
 </materials>

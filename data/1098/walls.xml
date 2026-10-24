@@ -2022,4 +2022,32 @@
 		</wall>
 	</brush>
 
+	<brush name="Sunawall" type="wall">
+		<wall type="horizontal">
+			<item id="42291" chance="500"/>
+		</wall>
+		<wall type="vertical">
+			<item id="42289" chance="400"/>
+		</wall>
+		<wall type="corner">
+			<item id="42290" chance="1000"/>
+		</wall>
+		<wall type="pole">
+			<item id="42288" chance="1000"/>
+		</wall>
+	</brush>
+	<brush name="Sunawall2" type="wall">
+		<wall type="horizontal">
+			<item id="29581" chance="500"/>
+		</wall>
+		<wall type="vertical">
+			<item id="29579" chance="400"/>
+		</wall>
+		<wall type="corner">
+			<item id="29580" chance="1000"/>
+		</wall>
+		<wall type="pole">
+			<item id="29578" chance="1000"/>
+		</wall>
+	</brush>
 </materials>
