@@ -2,6 +2,7 @@ import React from 'react';
 
 import { ZoneVisibility } from '~/domain/zones';
 import { SelectionMode } from '~/usecase/floors';
+import { AutoSaveMode } from '~/adapter/preferences';
 import { TooltipTypes, TooltipTypeKey } from '~/domain/tooltips';
 
 export interface EditorSettingsValue {
@@ -33,6 +34,8 @@ export interface EditorSettingsValue {
   fullSpriteThumbnails: boolean;
   copyPositionFormat: string;
   infiniteMouse: boolean;
+  autoSave: AutoSaveMode;
+  autoSaveDelay: number;
   zoneVisibility: ZoneVisibility;
   reloadEditor: () => void;
   reloadGeneral: () => void;

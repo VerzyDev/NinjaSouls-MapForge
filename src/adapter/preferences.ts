@@ -45,6 +45,8 @@ export async function saveClientConfig(config: ClientConfig): Promise<void> {
   await setSetting(KEY, config);
 }
 
+export type AutoSaveMode = 'off' | 'afterDelay' | 'onWindowChange';
+
 export interface GeneralConfig {
   maxStack: number;
   copyPositionFormat: string;
@@ -53,6 +55,8 @@ export interface GeneralConfig {
   infiniteMouse: boolean;
   backupOnSave: boolean;
   backupCount: number;
+  autoSave: AutoSaveMode;
+  autoSaveDelay: number;
 }
 
 export const defaultGeneralConfig: GeneralConfig = {
@@ -62,7 +66,9 @@ export const defaultGeneralConfig: GeneralConfig = {
   spawnTime: 60,
   infiniteMouse: true,
   backupOnSave: true,
-  backupCount: 5
+  backupCount: 5,
+  autoSave: 'off',
+  autoSaveDelay: 60
 };
 
 export async function loadGeneralConfig(): Promise<GeneralConfig> {

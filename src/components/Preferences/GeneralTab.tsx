@@ -1,7 +1,7 @@
 import { MIN_STACK, MAX_STACK } from '~/domain/dock';
-import { GeneralConfig } from '~/adapter/preferences';
 import { Button } from '~/components/commons/ui/button';
 import { Checkbox } from '~/components/commons/ui/checkbox';
+import { AutoSaveMode, GeneralConfig } from '~/adapter/preferences';
 import { formatPosition, COPY_POSITION_FORMATS } from '~/usecase/positionFormat';
 import { Select, SelectItem, SelectValue, SelectContent, SelectTrigger } from '~/components/commons/ui/select';
 
@@ -14,6 +14,12 @@ interface GeneralTabProps {
 
 const STACK_OPTIONS = Array.from({ length: MAX_STACK - MIN_STACK + 1 }, (_, i) => MIN_STACK + i);
 const SAMPLE_POSITION = { x: 1000, y: 1000, z: 7 };
+
+const AUTO_SAVE_MODES: { id: AutoSaveMode; label: string }[] = [
+  { id: 'off', label: 'Off' },
+  { id: 'afterDelay', label: 'After delay' },
+  { id: 'onWindowChange', label: 'On window change' }
+];
 
 const GeneralTab = ({ config, data, onResetLayout, onChange }: GeneralTabProps) => {
   return (
@@ -102,6 +108,46 @@ const GeneralTab = ({ config, data, onResetLayout, onChange }: GeneralTabProps) 
         </div>
         <Checkbox checked={config.infiniteMouse} onCheckedChange={(v) => onChange({ ...config, infiniteMouse: v === true })} />
       </div>
+
+      <div className="h-px bg-border" />
+
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col">
+          <span className="text-xs font-medium">Auto save</span>
+          <span className="text-[10px] text-muted-foreground">Save the active map automatically if it already has a file</span>
+        </div>
+        <Select value={config.autoSave} onValueChange={(v) => onChange({ ...config, autoSave: v as AutoSaveMode })}>
+          <SelectTrigger className="h-7 w-44">
+            <SelectValue>{AUTO_SAVE_MODES.find((m) => m.id === config.autoSave)?.label}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {AUTO_SAVE_MODES.map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                {m.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {config.autoSave === 'afterDelay' && (
+        <>
+          <div className="h-px bg-border" />
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col">
+              <span className="text-xs font-medium">Auto save delay</span>
+              <span className="text-[10px] text-muted-foreground">Seconds without edits before saving</span>
+            </div>
+            <input
+              min={1}
+              type="number"
+              value={config.autoSaveDelay}
+              onChange={(e) => onChange({ ...config, autoSaveDelay: Math.max(1, Number(e.target.value) | 0) })}
+              className="h-7 w-16 rounded border border-input bg-background px-2 text-sm text-foreground outline-none focus:border-ring"
+            />
+          </div>
+        </>
+      )}
 
       <div className="h-px bg-border" />
 

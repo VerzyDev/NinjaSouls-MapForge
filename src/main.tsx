@@ -60,6 +60,7 @@ import { useMapTabs } from '~/usecase/hooks/Workspace/useMapTabs';
 import { DragHandleProps } from '~/components/Dock/DockablePanel';
 import { TooltipProvider } from '~/components/commons/ui/tooltip';
 import ItemPropertiesPanel from '~/components/ItemPropertiesPanel';
+import { useAutoSave } from '~/usecase/hooks/Workspace/useAutoSave';
 import { useTool, ToolProvider } from '~/usecase/context/ToolContext';
 import { useMapSpawns } from '~/usecase/hooks/Workspace/useMapSpawns';
 import { useMapHouses } from '~/usecase/hooks/Workspace/useMapHouses';
@@ -226,7 +227,9 @@ const App = () => {
     toggleWaypoints,
     toggleSpawns,
     toggleGroundBlocksFill,
-    toggleFloodContiguous
+    toggleFloodContiguous,
+    autoSave,
+    autoSaveDelay
   } = useEditorSettings();
   const { setPaletteCategory, referenceImage, patchReferenceImage, selectBrush } = useTool();
 
@@ -298,10 +301,12 @@ const App = () => {
   const [dirtyIds, setDirtyIds] = React.useState<Set<string>>(new Set());
   const dirtyTabs = React.useRef(dirtyIds);
   dirtyTabs.current = dirtyIds;
+  const autoSaveTouch = React.useRef<() => void>(() => undefined);
   const markActiveDirty = React.useCallback(() => {
     const id = activeIdRef.current;
     if (!id) return;
     setDirtyIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+    autoSaveTouch.current();
   }, []);
   const clearDirty = React.useCallback((id: string) => {
     setDirtyIds((prev) => {
@@ -412,6 +417,7 @@ const App = () => {
     handleNew,
     handleSave,
     handleSaveAs,
+    autoSaveActive,
     clearRecent,
     setFloorZ,
     setZoom,
@@ -429,6 +435,14 @@ const App = () => {
   });
 
   activeIdRef.current = activeId;
+
+  autoSaveTouch.current = useAutoSave({
+    mode: autoSave,
+    delaySeconds: autoSaveDelay,
+    isDirty: () => !!active?.path && dirtyTabs.current.has(active.id),
+    isBusy: () => busy || !!saving,
+    save: autoSaveActive
+  });
 
   const cycleTab = React.useCallback(
     (forward: boolean) => {

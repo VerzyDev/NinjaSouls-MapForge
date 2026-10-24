@@ -1,10 +1,10 @@
 import React from 'react';
 
+import { setDoorLocked } from '~/adapter/map';
 import { SelectionMode } from '~/usecase/floors';
 import { useSetting } from '~/usecase/hooks/useSetting';
 import { ZoneVisibility, DEFAULT_ZONE_VISIBILITY } from '~/domain/zones';
 import { TooltipTypes, TooltipTypeKey, DEFAULT_TOOLTIP_TYPES } from '~/domain/tooltips';
-import { setDoorLocked } from '~/adapter/map';
 import { loadEditorConfig, loadGeneralConfig, defaultEditorConfig, defaultGeneralConfig } from '~/adapter/preferences';
 
 import { EditorSettingsValue, EditorSettingsProviderProps } from './types';
@@ -50,6 +50,8 @@ export const EditorSettingsProvider = ({ children }: EditorSettingsProviderProps
   const [fullSpriteThumbnails, setFullSpriteThumbnails] = React.useState(defaultEditorConfig.fullSpriteThumbnails);
   const [copyPositionFormat, setCopyPositionFormat] = React.useState(defaultGeneralConfig.copyPositionFormat);
   const [infiniteMouse, setInfiniteMouse] = React.useState(defaultGeneralConfig.infiniteMouse);
+  const [autoSave, setAutoSave] = React.useState(defaultGeneralConfig.autoSave);
+  const [autoSaveDelay, setAutoSaveDelay] = React.useState(defaultGeneralConfig.autoSaveDelay);
 
   const reloadGeneral = React.useCallback(() => {
     void loadGeneralConfig().then((g) => {
@@ -57,6 +59,8 @@ export const EditorSettingsProvider = ({ children }: EditorSettingsProviderProps
       setSpawnTime(g.spawnTime);
       setCopyPositionFormat(g.copyPositionFormat);
       setInfiniteMouse(g.infiniteMouse);
+      setAutoSave(g.autoSave);
+      setAutoSaveDelay(g.autoSaveDelay);
     });
   }, []);
 
@@ -147,6 +151,8 @@ export const EditorSettingsProvider = ({ children }: EditorSettingsProviderProps
       fullSpriteThumbnails,
       copyPositionFormat,
       infiniteMouse,
+      autoSave,
+      autoSaveDelay,
       zoneVisibility,
       reloadEditor,
       reloadGeneral,
@@ -199,6 +205,8 @@ export const EditorSettingsProvider = ({ children }: EditorSettingsProviderProps
       fullSpriteThumbnails,
       copyPositionFormat,
       infiniteMouse,
+      autoSave,
+      autoSaveDelay,
       zoneVisibility,
       reloadEditor,
       reloadGeneral,

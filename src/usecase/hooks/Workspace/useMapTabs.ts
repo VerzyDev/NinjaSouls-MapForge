@@ -63,6 +63,7 @@ export interface MapTabsApi {
   handleNew: () => Promise<void>;
   handleSave: () => Promise<void>;
   handleSaveAs: () => Promise<void>;
+  autoSaveActive: () => Promise<void>;
   clearRecent: () => void;
   setFloorZ: (z: number) => void;
   setZoom: (z: number) => void;
@@ -363,10 +364,10 @@ export const useMapTabs = (
     }
   };
 
-  const saveToPath = async (tab: MapTab, path: string) => {
+  const saveToPath = async (tab: MapTab, path: string, auto = false) => {
     setBusy(true);
-    setSaving({ value: 0, label: 'Preparing...' });
-    setStatus('Saving map...');
+    setSaving({ value: 0, label: auto ? 'Auto saving...' : 'Preparing...' });
+    setStatus(auto ? 'Auto saving map...' : 'Saving map...');
     try {
       await onBeforeSave?.(tab.map.id, path);
       if (path.toLowerCase().endsWith('.otbm')) {
@@ -378,12 +379,12 @@ export const useMapTabs = (
       await onAfterSave?.(tab.map.id, path);
       void loadGeneralConfig()
         .then((cfg) => {
-          if (cfg.backupOnSave) return backupMap(path, Math.min(5, Math.max(1, cfg.backupCount)));
+          if (cfg.backupOnSave && !auto) return backupMap(path, Math.min(5, Math.max(1, cfg.backupCount)));
         })
         .catch((e) => console.error('Backup failed', e));
       const name = path.split(/[\\/]/).pop() ?? tab.title;
       updateActive({ path, title: name });
-      setStatus(`Saved ${name}`);
+      setStatus(auto ? `Auto saved ${name}` : `Saved ${name}`);
       void addRecentMap(path).then(setRecent);
     } catch (e) {
       setError(`Failed to save map: ${e}`);
@@ -418,6 +419,10 @@ export const useMapTabs = (
     else await handleSaveAs();
   };
 
+  const autoSaveActive = async () => {
+    if (active?.path) await saveToPath(active, active.path, true);
+  };
+
   return {
     tabs,
     recent,
@@ -434,6 +439,7 @@ export const useMapTabs = (
     handleNew,
     handleSave,
     handleSaveAs,
+    autoSaveActive,
     clearRecent,
     setFloorZ,
     setZoom,
