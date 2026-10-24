@@ -21,6 +21,7 @@ import { hasSidecars } from '~/lib/map/sidecars';
 import ToolsPanel from '~/components/ToolsPanel';
 import JumpToItem from '~/components/JumpToItem';
 import { reloadScripts } from '~/adapter/scripts';
+import { initKeybinds } from '~/usecase/keybinds';
 import AboutDialog from '~/components/AboutDialog';
 import { MIN_ZOOM, MAX_ZOOM } from '~/usecase/zoom';
 import { openReplaceItem } from '~/adapter/windows';
@@ -1318,6 +1319,8 @@ const isPageReload = () => {
 };
 
 const mount = () => createRoot(document.getElementById('root')!).render(<Root />);
+
+void initKeybinds();
 
 if (isLuaEnabled() && isPageReload()) {
   reloadScripts()

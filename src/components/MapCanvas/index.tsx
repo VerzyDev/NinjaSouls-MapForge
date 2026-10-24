@@ -4,6 +4,7 @@ import { IconDoorExit } from '@tabler/icons-react';
 
 import { stepZoom } from '~/usecase/zoom';
 import { setHistoryLimits } from '~/adapter/map';
+import { matchKeybind } from '~/usecase/keybinds';
 import { GLRenderer } from '~/usecase/glRenderer';
 import { useTool } from '~/usecase/context/ToolContext';
 import { MAP_MIN_LAYER, MAP_MAX_LAYER } from '~/usecase/floors';
@@ -31,6 +32,17 @@ import SpawnPropertiesForm from './SpawnPropertiesForm';
 import { MapCanvasProps, MapCanvasInputs } from './types';
 import CreaturePropertiesForm from './CreaturePropertiesForm';
 import WaypointPropertiesForm from './WaypointPropertiesForm';
+
+const CANVAS_KEYBINDS = [
+  'tool.select',
+  'tool.brush',
+  'tool.eraser',
+  'nav.floorUp',
+  'nav.floorDown',
+  'nav.zoomIn',
+  'nav.zoomOut',
+  'nav.zoomReset'
+] as const;
 
 const KEEP_SELECTION_TOOLS = new Set<ToolId>(['select', 'wand', 'bucket', 'brush']);
 
@@ -234,49 +246,26 @@ const MapCanvas = (props: MapCanvasProps) => {
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.altKey) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+      const id = matchKeybind(e, CANVAS_KEYBINDS);
+      if (!id) return;
 
       const i = inputs.current;
-
-      if (e.ctrlKey || e.metaKey) {
-        if (e.code === 'Equal') {
-          e.preventDefault();
-          const nz = stepZoom(camera.zoomRef.current, 1);
-          if (nz !== camera.zoomRef.current) i.onZoomChange(nz);
-        } else if (e.code === 'Minus') {
-          e.preventDefault();
-          const nz = stepZoom(camera.zoomRef.current, -1);
-          if (nz !== camera.zoomRef.current) i.onZoomChange(nz);
-        } else if (e.code === 'Digit0' || e.code === 'Numpad0') {
-          e.preventDefault();
-          if (camera.zoomRef.current !== 1) i.onZoomChange(1);
-        }
-        return;
-      }
-
-      if (e.key === 'PageUp' || e.code === 'NumpadAdd') {
-        e.preventDefault();
-        i.onFloorChange(Math.max(MAP_MIN_LAYER, i.floorZ - 1));
-      } else if (e.key === 'PageDown' || e.code === 'NumpadSubtract') {
-        e.preventDefault();
-        i.onFloorChange(Math.min(MAP_MAX_LAYER, i.floorZ + 1));
-      } else if (e.code === 'NumpadMultiply') {
-        e.preventDefault();
-        const nz = stepZoom(camera.zoomRef.current, 1);
+      const zoom = (dir: 1 | -1) => {
+        const nz = stepZoom(camera.zoomRef.current, dir);
         if (nz !== camera.zoomRef.current) i.onZoomChange(nz);
-      } else if (e.code === 'NumpadDivide') {
-        e.preventDefault();
-        const nz = stepZoom(camera.zoomRef.current, -1);
-        if (nz !== camera.zoomRef.current) i.onZoomChange(nz);
-      } else if (e.code === 'KeyV') {
-        i.onToolChange('select');
-      } else if (e.code === 'KeyB') {
-        i.onToolChange('brush');
-      } else if (e.code === 'KeyE') {
-        i.onToolChange('eraser');
-      }
+      };
+
+      if (id === 'tool.select') return i.onToolChange('select');
+      if (id === 'tool.brush') return i.onToolChange('brush');
+      if (id === 'tool.eraser') return i.onToolChange('eraser');
+      e.preventDefault();
+      if (id === 'nav.floorUp') i.onFloorChange(Math.max(MAP_MIN_LAYER, i.floorZ - 1));
+      else if (id === 'nav.floorDown') i.onFloorChange(Math.min(MAP_MAX_LAYER, i.floorZ + 1));
+      else if (id === 'nav.zoomIn') zoom(1);
+      else if (id === 'nav.zoomOut') zoom(-1);
+      else if (camera.zoomRef.current !== 1) i.onZoomChange(1);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

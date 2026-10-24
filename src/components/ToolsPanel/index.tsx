@@ -1,18 +1,5 @@
 import { useRef, useMemo, useState, ComponentType } from 'react';
 import {
-  IconHome,
-  IconSpider,
-  IconSwords,
-  IconLogout,
-  IconDoorExit,
-  IconSwordOff,
-  IconMessage2,
-  IconViewfinder,
-  IconShieldHalf,
-  IconLockSquare,
-  IconScanLetterA
-} from '@tabler/icons-react';
-import {
   Brush,
   Check,
   Frame,
@@ -30,12 +17,26 @@ import {
   MousePointer2,
   GripHorizontal
 } from 'lucide-react';
+import {
+  IconHome,
+  IconSpider,
+  IconSwords,
+  IconLogout,
+  IconDoorExit,
+  IconSwordOff,
+  IconMessage2,
+  IconViewfinder,
+  IconShieldHalf,
+  IconLockSquare,
+  IconScanLetterA
+} from '@tabler/icons-react';
 
 import { cn } from '~/usecase/classNames';
 import { Hint } from '~/components/commons/ui/tooltip';
 import { paletteBrushOptions } from '~/adapter/biomes';
 import { useTool } from '~/usecase/context/ToolContext';
 import { Slider } from '~/components/commons/ui/slider';
+import { useKeybinds, withKeybind } from '~/usecase/keybinds';
 import BrushImage from '~/components/PalettePanel/BrushImage';
 import BrushSelect from '~/components/PalettePanel/BrushSelect';
 import { DragHandleProps } from '~/components/Dock/DockablePanel';
@@ -188,6 +189,7 @@ const TileSwatch = () => {
     brushShape,
     setBrushShape
   } = useTool();
+  const keybinds = useKeybinds();
   const [open, setOpen] = useState<'primary' | 'secondary' | null>(null);
   const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(null);
   const primaryRef = useRef<HTMLButtonElement>(null);
@@ -232,7 +234,7 @@ const TileSwatch = () => {
             )}
           </button>
         </Hint>
-        <Hint side="right" label={activeTile ? `Active tile: ${activeTile.name} (X to swap)` : 'Pick an active tile (X to swap)'}>
+        <Hint side="right" label={withKeybind(activeTile ? `Active tile: ${activeTile.name}` : 'Pick an active tile', keybinds, 'tool.swapTiles')}>
           <button
             ref={primaryRef}
             onClick={() => openFor('primary')}
@@ -243,7 +245,7 @@ const TileSwatch = () => {
         </Hint>
         <button
           onClick={swapTiles}
-          title="Swap tiles (X)"
+          title={withKeybind('Swap tiles', keybinds, 'tool.swapTiles')}
           className="absolute right-0 top-0 z-20 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-popover text-muted-foreground shadow-sm hover:text-foreground"
         >
           <Repeat2 className="h-2.5 w-2.5" />
@@ -324,6 +326,7 @@ const ToolsPanel = ({ dragHandle }: ToolsPanelProps) => {
     zoneVisibility,
     setAllZones
   } = useEditorSettings();
+  const keybinds = useKeybinds();
   const anyZoneVisible = zoneVisibility.pz || zoneVisibility.nopvp || zoneVisibility.nologout || zoneVisibility.pvp;
 
   return (
@@ -357,7 +360,7 @@ const ToolsPanel = ({ dragHandle }: ToolsPanelProps) => {
         return (
           <div key={tool.id} className="flex w-full flex-col items-center">
             {tool.id === 'zone_pz' && <div className="my-1 h-px w-5 bg-border/60" />}
-            <Hint side="right" label={tool.label}>
+            <Hint side="right" label={tool.keybind ? withKeybind(tool.label, keybinds, tool.keybind) : tool.label}>
               <button
                 onClick={() => setActiveTool(tool.id)}
                 className={cn(
@@ -376,7 +379,7 @@ const ToolsPanel = ({ dragHandle }: ToolsPanelProps) => {
         <div className="my-1 h-px w-5 bg-border/60" />
         <TileSwatch />
         <div className="my-1 h-px w-5 bg-border/60" />
-        <Hint side="right" label="Show creatures and NPCs (F)">
+        <Hint side="right" label={withKeybind('Show creatures and NPCs', keybinds, 'view.creatures')}>
           <button
             onClick={toggleCreatures}
             className={cn(
@@ -387,7 +390,7 @@ const ToolsPanel = ({ dragHandle }: ToolsPanelProps) => {
             <IconSpider className="h-[18px] w-[18px]" />
           </button>
         </Hint>
-        <Hint side="right" label="Show spawn areas (Alt+S)">
+        <Hint side="right" label={withKeybind('Show spawn areas', keybinds, 'view.spawns')}>
           <button
             onClick={toggleSpawns}
             className={cn(
@@ -398,7 +401,7 @@ const ToolsPanel = ({ dragHandle }: ToolsPanelProps) => {
             <IconViewfinder className="h-[18px] w-[18px]" />
           </button>
         </Hint>
-        <Hint side="right" label="Show houses (Ctrl+H)">
+        <Hint side="right" label={withKeybind('Show houses', keybinds, 'view.houses')}>
           <button
             onClick={toggleHouses}
             className={cn(
@@ -409,7 +412,7 @@ const ToolsPanel = ({ dragHandle }: ToolsPanelProps) => {
             <IconHome className="h-[18px] w-[18px]" />
           </button>
         </Hint>
-        <Hint side="right" label="Show tooltips (Y)">
+        <Hint side="right" label={withKeybind('Show tooltips', keybinds, 'view.tooltips')}>
           <button
             onClick={toggleTooltips}
             className={cn(
@@ -442,7 +445,7 @@ const ToolsPanel = ({ dragHandle }: ToolsPanelProps) => {
             <IconLockSquare className="h-[18px] w-[18px]" />
           </button>
         </Hint>
-        <Hint side="right" label="Automatic borders - auto-border, walls, tables, carpets, mountains (Ctrl+A)">
+        <Hint side="right" label={withKeybind('Automatic borders - auto-border, walls, tables, carpets, mountains', keybinds, 'view.automagic')}>
           <button
             onClick={toggleAutomagic}
             className={cn(

@@ -1,4 +1,5 @@
 import { ZoneToolId } from '~/domain/zones';
+import { KeybindId } from '~/domain/keybinds';
 
 export type HouseToolId = 'house' | 'house_exit';
 
@@ -7,22 +8,25 @@ export type ToolId = 'select' | 'brush' | 'pen' | 'eraser' | 'borderize' | 'buck
 export interface ToolMeta {
   id: ToolId;
   label: string;
+  keybind?: KeybindId;
 }
 
 export const TOOLS: ToolMeta[] = [
-  { id: 'select', label: 'Select' },
-  { id: 'brush', label: 'Brush' },
+  { id: 'select', label: 'Select', keybind: 'tool.select' },
+  { id: 'brush', label: 'Brush', keybind: 'tool.brush' },
   { id: 'pen', label: 'Pen - click to add points, drag for curves, Enter/double-click to apply, Esc to cancel' },
-  { id: 'eraser', label: 'Eraser' },
-  { id: 'borderize', label: 'Borderize (N) - paint to reborder tiles' },
+  { id: 'eraser', label: 'Eraser', keybind: 'tool.eraser' },
+  { id: 'borderize', label: 'Borderize - paint to reborder tiles', keybind: 'tool.borderize' },
   {
     id: 'bucket',
     label:
-      'Fill (G) - flood the area under the cursor with the active brush, Ctrl inverts contiguous, Alt to ignore the reference image'
+      'Fill - flood the area under the cursor with the active brush, Ctrl inverts contiguous, Alt to ignore the reference image',
+    keybind: 'tool.bucket'
   },
   {
     id: 'wand',
-    label: 'Magic wand (Ctrl+W) - select the area under the cursor, Ctrl inverts contiguous, Alt to ignore the reference image'
+    label: 'Magic wand - select the area under the cursor, Ctrl inverts contiguous, Alt to ignore the reference image',
+    keybind: 'tool.wand'
   },
   { id: 'spawn', label: 'Spawn' },
   { id: 'zone_pz', label: 'Protection zone (Ctrl-drag to erase)' },

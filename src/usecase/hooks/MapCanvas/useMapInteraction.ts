@@ -8,7 +8,7 @@ import { loadSprites } from '~/adapter/sprites';
 import { mapClientIds } from '~/adapter/assets';
 import { generateApply } from '~/adapter/biomes';
 import { brushForItem } from '~/adapter/palette';
-import { PaletteBrush, ItemBrushKind, ActiveBrush } from '~/domain/palette';
+import { matchKeybind } from '~/usecase/keybinds';
 import { selectionFloorBoxes } from '~/usecase/floors';
 import { readWalkableMask } from '~/usecase/hunt/mask';
 import { buildItemPreview } from '~/usecase/itemPreview';
@@ -19,6 +19,7 @@ import { REPLACE_ITEM_EVENTS } from '~/domain/replaceItem';
 import { Position, ChunkTiles, PreviewTile } from '~/domain/map';
 import { MountainOptions, ResolvedMountain } from '~/domain/mountain';
 import { GenPlan, ResolvedBiome, GenerateOptions } from '~/domain/biome';
+import { ActiveBrush, PaletteBrush, ItemBrushKind } from '~/domain/palette';
 import { MapSpawns, emptyMapSpawns, buildMapSpawns } from '~/domain/creature';
 import { HuntMeta, HuntPreviewParams } from '~/usecase/context/ToolContext/types';
 import { buildRoute, connectRoute, reachableFrom } from '~/lib/generator/huntRoute';
@@ -66,8 +67,8 @@ import {
   groundMask,
   paintTiles,
   PaintResult,
-  PaintOptions,
   floodRegion,
+  PaintOptions,
   EraseOptions,
   previewPaint,
   packChunkKey,
@@ -102,6 +103,17 @@ interface Sidecar {
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 const MOUNTAIN_SCATTER_MARGIN = 1;
+
+const EDIT_KEYBINDS = [
+  'edit.fillSelection',
+  'edit.redo',
+  'edit.undo',
+  'edit.copy',
+  'edit.clearSelection',
+  'edit.cut',
+  'edit.paste',
+  'edit.delete'
+] as const;
 
 const TILE_BRUSH_ORDER: ItemBrushKind[] = ['wall', 'carpet', 'table', 'doodad', 'door', 'ground'];
 
@@ -2620,57 +2632,31 @@ export function useMapInteraction(deps: InteractionDeps) {
       }
       if (modalOpen.current) return;
       if (e.key === 'Escape' && clearSelection()) return;
-      if (e.altKey && e.code === 'Backspace') {
-        e.preventDefault();
-        fillSelection();
-        return;
-      }
-      const mod = e.ctrlKey || e.metaKey;
-      const key = e.key.toLowerCase();
-      if (mod && (key === 'y' || (key === 'z' && e.shiftKey))) {
-        e.preventDefault();
-        redo();
-        return;
-      }
-      if (mod && key === 'z') {
-        e.preventDefault();
-        undo();
-        return;
-      }
-      if (mod && key === 'c') {
-        e.preventDefault();
-        copySelected();
-        return;
-      }
-      if (mod && key === 'd') {
-        e.preventDefault();
-        clearSelection();
-        return;
-      }
-      if (mod && key === 'x') {
-        e.preventDefault();
-        cutSelected();
-        return;
-      }
-      if (mod && key === 'v') {
-        e.preventDefault();
-        if (clipboardCount.current === 0) {
-          emit('Clipboard empty');
+      const id = matchKeybind(e, EDIT_KEYBINDS);
+      if (!id) return;
+      if (id === 'edit.delete') {
+        if (
+          !selection.entries.current.size &&
+          !selection.spawn.current &&
+          !selection.creature.current &&
+          !selection.waypoint.current
+        )
           return;
-        }
-        scene.pasteGhost.current = clipboardGhostSource.current ?? [];
-        emit('Click to paste, Esc to cancel');
-        return;
-      }
-      if (
-        e.key === 'Delete' &&
-        (selection.entries.current.size > 0 ||
-          selection.spawn.current ||
-          selection.creature.current ||
-          selection.waypoint.current)
-      ) {
         e.preventDefault();
         deleteSelected();
+        return;
+      }
+      e.preventDefault();
+      if (id === 'edit.fillSelection') fillSelection();
+      else if (id === 'edit.redo') redo();
+      else if (id === 'edit.undo') undo();
+      else if (id === 'edit.copy') copySelected();
+      else if (id === 'edit.clearSelection') clearSelection();
+      else if (id === 'edit.cut') cutSelected();
+      else if (clipboardCount.current === 0) emit('Clipboard empty');
+      else {
+        scene.pasteGhost.current = clipboardGhostSource.current ?? [];
+        emit('Click to paste, Esc to cancel');
       }
     };
     window.addEventListener('keydown', onKey);

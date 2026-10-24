@@ -1,12 +1,14 @@
 import { DEFAULT_MAX_STACK } from '~/domain/dock';
 import { getSetting, setSetting } from '~/adapter/settings';
 import { DEFAULT_COPY_POSITION_FORMAT } from '~/usecase/positionFormat';
+import { Keybinds, KeybindId, DEFAULT_KEYBINDS } from '~/domain/keybinds';
 import { ItemSource, DATA_DIR_KEY, DEFAULT_VERSION } from '~/adapter/assets';
 
 const KEY = 'clientConfig';
 const GENERAL_KEY = 'generalConfig';
 const EDITOR_KEY = 'editorConfig';
 const HUNT_KEY = 'huntConfig';
+const KEYBINDS_KEY = 'keybinds';
 
 export async function loadDataDir(): Promise<string> {
   return getSetting<string>(DATA_DIR_KEY, '');
@@ -126,4 +128,21 @@ export async function loadHuntConfig(): Promise<HuntConfig> {
 
 export async function saveHuntConfig(config: HuntConfig): Promise<void> {
   await setSetting(HUNT_KEY, config);
+}
+
+export async function loadKeybinds(): Promise<Keybinds> {
+  const stored = await getSetting<Partial<Keybinds>>(KEYBINDS_KEY, {});
+  const merged = { ...DEFAULT_KEYBINDS };
+  for (const id of Object.keys(merged) as KeybindId[]) {
+    const combos = stored[id];
+    if (Array.isArray(combos)) merged[id] = combos;
+  }
+  return merged;
+}
+
+export async function saveKeybinds(keybinds: Keybinds): Promise<void> {
+  const changed = (Object.keys(keybinds) as KeybindId[]).filter(
+    (id) => keybinds[id].join('|') !== DEFAULT_KEYBINDS[id].join('|')
+  );
+  await setSetting(KEYBINDS_KEY, Object.fromEntries(changed.map((id) => [id, keybinds[id]])));
 }

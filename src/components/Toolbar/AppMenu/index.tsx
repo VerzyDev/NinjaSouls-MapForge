@@ -19,6 +19,7 @@ import { PALETTE_CATEGORIES } from '~/domain/palette';
 import { openTilesetEditor } from '~/adapter/windows';
 import { useTool } from '~/usecase/context/ToolContext';
 import { TOOLTIP_TYPE_GROUPS } from '~/domain/tooltips';
+import { useKeybinds, keybindLabel } from '~/usecase/keybinds';
 import { useAssetsBundle } from '~/usecase/context/AssetsContext';
 import { useEditorSettings } from '~/usecase/context/EditorSettingsContext';
 import { openProject, PROJECT_EXT, closeProject, RecentProject, recentProjects, clearRecentProjects } from '~/adapter/project';
@@ -88,6 +89,7 @@ const AppMenu = ({ state, file, edit, map, window: windowActions, help }: AppMen
     toggleCompensateSelection
   } = useEditorSettings();
   const { dataDir, project } = useAssetsBundle();
+  const keybinds = useKeybinds();
   const { referenceImage, patchReferenceImage } = useTool();
   const anyZoneVisible = zoneVisibility.pz || zoneVisibility.nopvp || zoneVisibility.nologout || zoneVisibility.pvp;
   const stop = (e: React.MouseEvent) => e.stopPropagation();
@@ -135,12 +137,12 @@ const AppMenu = ({ state, file, edit, map, window: windowActions, help }: AppMen
           <MenubarItem disabled={loading} onSelect={file.onNew}>
             <FilePlus className="mr-2 h-3.5 w-3.5" />
             New Map
-            <MenubarShortcut>Ctrl+N</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'file.new')}</MenubarShortcut>
           </MenubarItem>
           <MenubarItem disabled={loading} onSelect={file.onOpen}>
             <FolderOpen className="mr-2 h-3.5 w-3.5" />
             Open Map...
-            <MenubarShortcut>Ctrl+O</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'file.open')}</MenubarShortcut>
           </MenubarItem>
           <MenubarSub>
             <MenubarSubTrigger disabled={loading}>Open Recent</MenubarSubTrigger>
@@ -173,11 +175,11 @@ const AppMenu = ({ state, file, edit, map, window: windowActions, help }: AppMen
           <MenubarItem disabled={!hasActive} onSelect={file.onSave}>
             <Save className="mr-2 h-3.5 w-3.5" />
             Save
-            <MenubarShortcut>Ctrl+S</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'file.save')}</MenubarShortcut>
           </MenubarItem>
           <MenubarItem disabled={!hasActive} onSelect={file.onSaveAs}>
             Save As...
-            <MenubarShortcut>Ctrl+Shift+S</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'file.saveAs')}</MenubarShortcut>
           </MenubarItem>
           <MenubarSeparator />
           <MenubarItem onSelect={file.onImportMap} disabled={!hasActive || loading}>
@@ -221,7 +223,7 @@ const AppMenu = ({ state, file, edit, map, window: windowActions, help }: AppMen
           <MenubarSeparator />
           <MenubarItem disabled={!hasActive} onSelect={file.onCloseMap}>
             Close Map
-            <MenubarShortcut>Ctrl+Shift+W</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'file.closeTab')}</MenubarShortcut>
           </MenubarItem>
           <MenubarSeparator />
           <MenubarItem onSelect={file.onRequestExit}>Exit</MenubarItem>
@@ -268,7 +270,7 @@ const AppMenu = ({ state, file, edit, map, window: windowActions, help }: AppMen
           <MenubarSeparator />
           <MenubarItem onSelect={edit.onJumpToItem}>
             Jump to Item...
-            <MenubarShortcut>Ctrl+J</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'edit.jumpToItem')}</MenubarShortcut>
           </MenubarItem>
           <MenubarItem disabled={!hasActive} onSelect={edit.onReplaceItems}>
             Replace Items...
@@ -285,7 +287,7 @@ const AppMenu = ({ state, file, edit, map, window: windowActions, help }: AppMen
           <MenubarItem onSelect={edit.onOpenScripts}>Lua Scripts...</MenubarItem>
           <MenubarItem onSelect={edit.onOpenPreferences}>
             Preferences...
-            <MenubarShortcut>Ctrl+,</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'file.preferences')}</MenubarShortcut>
           </MenubarItem>
         </MenubarContent>
       </MenubarMenu>
@@ -295,16 +297,16 @@ const AppMenu = ({ state, file, edit, map, window: windowActions, help }: AppMen
         <MenubarContent onMouseDown={stop}>
           <MenubarItem disabled={!hasActive} onSelect={map.onEditTowns}>
             Edit Towns
-            <MenubarShortcut>Ctrl+T</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'map.towns')}</MenubarShortcut>
           </MenubarItem>
           <MenubarSeparator />
           <MenubarItem disabled={!hasActive} onSelect={map.onMapProperties}>
             Properties...
-            <MenubarShortcut>Ctrl+P</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'map.properties')}</MenubarShortcut>
           </MenubarItem>
           <MenubarItem disabled={!hasActive} onSelect={map.onMapStatistics}>
             Statistics
-            <MenubarShortcut>F8</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'map.statistics')}</MenubarShortcut>
           </MenubarItem>
           <MenubarSeparator />
           <MenubarItem disabled={!hasActive} onSelect={map.onExportMinimap}>
@@ -356,7 +358,7 @@ const AppMenu = ({ state, file, edit, map, window: windowActions, help }: AppMen
           <MenubarSeparator />
           <MenubarCheckboxItem checked={showBlocking} onCheckedChange={toggleBlocking} onSelect={(e) => e.preventDefault()}>
             Show blocking
-            <MenubarShortcut>O</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'view.blocking')}</MenubarShortcut>
           </MenubarCheckboxItem>
           <MenubarCheckboxItem
             disabled={!referenceImage}
@@ -365,7 +367,7 @@ const AppMenu = ({ state, file, edit, map, window: windowActions, help }: AppMen
             onCheckedChange={(v) => patchReferenceImage({ visible: v })}
           >
             Show reference image
-            <MenubarShortcut>R</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'view.cycleReference')}</MenubarShortcut>
           </MenubarCheckboxItem>
           <MenubarCheckboxItem
             disabled={!referenceImage}
@@ -377,11 +379,11 @@ const AppMenu = ({ state, file, edit, map, window: windowActions, help }: AppMen
           </MenubarCheckboxItem>
           <MenubarCheckboxItem checked={showShade} onCheckedChange={toggleShade} onSelect={(e) => e.preventDefault()}>
             Shade lower floors
-            <MenubarShortcut>Q</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'view.shade')}</MenubarShortcut>
           </MenubarCheckboxItem>
           <MenubarCheckboxItem checked={showWaypoints} onCheckedChange={toggleWaypoints} onSelect={(e) => e.preventDefault()}>
             Show waypoints
-            <MenubarShortcut>Shift+W</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'view.waypoints')}</MenubarShortcut>
           </MenubarCheckboxItem>
           <MenubarSeparator />
           <MenubarLabel>Fill and magic wand</MenubarLabel>
@@ -391,7 +393,7 @@ const AppMenu = ({ state, file, edit, map, window: windowActions, help }: AppMen
             onCheckedChange={toggleFloodContiguous}
           >
             Contiguous area only
-            <MenubarShortcut>C</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'view.floodContiguous')}</MenubarShortcut>
           </MenubarCheckboxItem>
           <MenubarCheckboxItem
             checked={groundBlocksFill}
@@ -399,7 +401,7 @@ const AppMenu = ({ state, file, edit, map, window: windowActions, help }: AppMen
             onCheckedChange={toggleGroundBlocksFill}
           >
             Ground already on the map blocks the fill
-            <MenubarShortcut>B</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'view.groundBlocksFill')}</MenubarShortcut>
           </MenubarCheckboxItem>
           <MenubarSeparator />
           <MenubarLabel>Eraser</MenubarLabel>
@@ -413,7 +415,7 @@ const AppMenu = ({ state, file, edit, map, window: windowActions, help }: AppMen
           <MenubarSeparator />
           <MenubarCheckboxItem checked={showTooltips} onCheckedChange={toggleTooltips} onSelect={(e) => e.preventDefault()}>
             Show tooltips
-            <MenubarShortcut>Y</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'view.tooltips')}</MenubarShortcut>
           </MenubarCheckboxItem>
           {TOOLTIP_TYPE_GROUPS.map((t) => (
             <MenubarCheckboxItem
@@ -438,7 +440,7 @@ const AppMenu = ({ state, file, edit, map, window: windowActions, help }: AppMen
             onCheckedChange={windowActions.onToggleMinimap}
           >
             Minimap
-            <MenubarShortcut>M</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'view.minimap')}</MenubarShortcut>
           </MenubarCheckboxItem>
           <MenubarCheckboxItem
             checked={propertiesOpen}
@@ -489,7 +491,7 @@ const AppMenu = ({ state, file, edit, map, window: windowActions, help }: AppMen
           <MenubarItem onSelect={help.onShortcuts}>
             <Keyboard className="mr-2 h-3.5 w-3.5" />
             Keyboard Shortcuts
-            <MenubarShortcut>F1</MenubarShortcut>
+            <MenubarShortcut>{keybindLabel(keybinds, 'map.shortcuts')}</MenubarShortcut>
           </MenubarItem>
           <MenubarSeparator />
           <MenubarItem onSelect={help.onCheckUpdates}>

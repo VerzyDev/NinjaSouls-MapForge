@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { matchKeybind } from '~/usecase/keybinds';
+
 interface ShortcutActions {
   activeId: string | null;
   handleNew: () => void;
@@ -29,6 +31,35 @@ interface ShortcutActions {
   toggleFloodContiguous: () => void;
 }
 
+const APP_KEYBINDS = [
+  'file.new',
+  'file.open',
+  'file.save',
+  'file.saveAs',
+  'file.closeTab',
+  'file.preferences',
+  'edit.jumpToItem',
+  'map.towns',
+  'map.properties',
+  'map.statistics',
+  'map.refreshAssets',
+  'map.shortcuts',
+  'view.minimap',
+  'view.shade',
+  'view.creatures',
+  'view.tooltips',
+  'view.blocking',
+  'view.groundBlocksFill',
+  'view.floodContiguous',
+  'view.cycleReference',
+  'view.automagic',
+  'view.houses',
+  'view.waypoints',
+  'view.spawns'
+] as const;
+
+type AppKeybind = (typeof APP_KEYBINDS)[number];
+
 const MODAL_SELECTOR = '[role="dialog"],[role="alertdialog"]';
 const FOCUS_TRAP_SELECTOR = `${MODAL_SELECTOR},[role="menu"],[role="listbox"],[role="combobox"]`;
 
@@ -52,112 +83,41 @@ export const useAppShortcuts = (actions: ShortcutActions) => {
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-      const key = e.key.toLowerCase();
-      const a = ref.current;
-      if (key === 's') {
-        e.preventDefault();
-        if (e.shiftKey) a.handleSaveAs();
-        else a.handleSave();
-        return;
-      }
-      if (key === 'a') {
-        e.preventDefault();
-        a.toggleAutomagic();
-        return;
-      }
-      if (key === 'h') {
-        e.preventDefault();
-        a.toggleHouses();
-        return;
-      }
-      if (e.shiftKey) {
-        if (key === 'w' && a.activeId) {
-          e.preventDefault();
-          a.closeTab(a.activeId);
-        }
-        return;
-      }
-      if (key === 'n') {
-        e.preventDefault();
-        a.handleNew();
-      } else if (key === 'o') {
-        e.preventDefault();
-        a.handleOpen();
-      } else if (key === 'j') {
-        e.preventDefault();
-        a.openJumpToItem();
-      } else if (key === 't') {
-        e.preventDefault();
-        a.openEditTowns();
-      } else if (key === 'p') {
-        e.preventDefault();
-        a.openMapProperties();
-      } else if (key === ',') {
-        e.preventDefault();
-        a.openPreferences();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
-      const key = e.key.toLowerCase();
-      if (e.altKey) {
-        if (key === 's') {
-          e.preventDefault();
-          ref.current.toggleSpawns();
-        }
-        return;
-      }
-      if (e.shiftKey) {
-        if (key === 'w') {
-          e.preventDefault();
-          ref.current.toggleWaypoints();
-        }
-        return;
-      }
-      if (key === 'm') {
-        e.preventDefault();
-        ref.current.toggleMinimap();
-      } else if (key === 'q') {
-        e.preventDefault();
-        ref.current.toggleShade();
-      } else if (key === 'f') {
-        e.preventDefault();
-        ref.current.toggleCreatures();
-      } else if (key === 'y') {
-        e.preventDefault();
-        ref.current.toggleTooltips();
-      } else if (key === 'o') {
-        e.preventDefault();
-        ref.current.toggleBlocking();
-      } else if (key === 'c') {
-        e.preventDefault();
-        ref.current.toggleFloodContiguous();
-      } else if (key === 'b') {
-        e.preventDefault();
-        ref.current.toggleGroundBlocksFill();
-      } else if (key === 'r') {
-        e.preventDefault();
-        ref.current.cycleReference();
-      } else if (e.key === 'F1') {
-        e.preventDefault();
-        ref.current.openShortcuts();
-      } else if (e.key === 'F8') {
-        e.preventDefault();
-        ref.current.openMapStatistics();
-      } else if (e.key === 'F5') {
-        e.preventDefault();
-        ref.current.refreshAssets();
-      }
+      if (t?.isContentEditable && (e.ctrlKey || e.metaKey)) return;
+      const id = matchKeybind(e, APP_KEYBINDS);
+      if (!id) return;
+      const a = ref.current;
+      if (id === 'file.closeTab' && !a.activeId) return;
+      e.preventDefault();
+      const run: Record<AppKeybind, () => void> = {
+        'file.new': a.handleNew,
+        'file.open': a.handleOpen,
+        'file.save': a.handleSave,
+        'file.saveAs': a.handleSaveAs,
+        'file.closeTab': () => a.activeId && a.closeTab(a.activeId),
+        'file.preferences': a.openPreferences,
+        'edit.jumpToItem': a.openJumpToItem,
+        'map.towns': a.openEditTowns,
+        'map.properties': a.openMapProperties,
+        'map.statistics': a.openMapStatistics,
+        'map.refreshAssets': a.refreshAssets,
+        'map.shortcuts': a.openShortcuts,
+        'view.minimap': a.toggleMinimap,
+        'view.shade': a.toggleShade,
+        'view.creatures': a.toggleCreatures,
+        'view.tooltips': a.toggleTooltips,
+        'view.blocking': a.toggleBlocking,
+        'view.groundBlocksFill': a.toggleGroundBlocksFill,
+        'view.floodContiguous': a.toggleFloodContiguous,
+        'view.cycleReference': a.cycleReference,
+        'view.automagic': a.toggleAutomagic,
+        'view.houses': a.toggleHouses,
+        'view.waypoints': a.toggleWaypoints,
+        'view.spawns': a.toggleSpawns
+      };
+      run[id]();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

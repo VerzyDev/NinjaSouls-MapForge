@@ -1,7 +1,9 @@
 import React from 'react';
 
 import { Position } from '~/domain/map';
+import { KeybindId } from '~/domain/keybinds';
 import { getSetting, setSetting } from '~/adapter/settings';
+import { isKeybind, matchKeybind } from '~/usecase/keybinds';
 import { BrushOption, zoneBrushOption } from '~/adapter/biomes';
 import { ToolId, EraserMode, isZoneTool } from '~/domain/tools';
 import { ResolvedBiome, GenerateOptions } from '~/domain/biome';
@@ -27,7 +29,13 @@ import {
 
 const ToolContext = React.createContext({} as ToolContextValue);
 
-const TOOL_KEYS: Record<string, ToolId> = { n: 'borderize', g: 'bucket' };
+const TOOL_KEYBINDS = {
+  'tool.borderize': 'borderize',
+  'tool.bucket': 'bucket',
+  'tool.wand': 'wand'
+} as const satisfies Partial<Record<KeybindId, ToolId>>;
+
+const TOOL_KEYBIND_IDS = Object.keys(TOOL_KEYBINDS) as (keyof typeof TOOL_KEYBINDS)[];
 
 const optionKey = (o: BrushOption): string => o.key ?? (o.lookType != null ? `creature:${o.name}` : `tile:${o.paintId}`);
 
@@ -130,7 +138,7 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey || e.key.toLowerCase() !== 'x') return;
+      if (!isKeybind(e, 'tool.swapTiles')) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       e.preventDefault();
@@ -148,15 +156,12 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.altKey || e.shiftKey) return;
-      const key = e.key.toLowerCase();
-      const ctrl = e.ctrlKey || e.metaKey;
-      const tool = ctrl ? (key === 'w' ? ('wand' as ToolId) : undefined) : TOOL_KEYS[key];
-      if (!tool) return;
+      const id = matchKeybind(e, TOOL_KEYBIND_IDS);
+      if (!id) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       e.preventDefault();
-      setActiveTool(tool);
+      setActiveTool(TOOL_KEYBINDS[id]);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

@@ -3,6 +3,7 @@ import { ChevronRight } from 'lucide-react';
 
 import { Position } from '~/domain/map';
 import { ITEM_BRUSH_LABELS } from '~/domain/palette';
+import { useKeybinds, keybindLabel } from '~/usecase/keybinds';
 
 import { HoverItem, TileBrushRef, ContextMenuState } from '../types';
 
@@ -69,6 +70,7 @@ const SubMenu = ({ label, children, openLeft }: { label: string; children: React
 );
 
 const TileContextMenu = ({ menu, handlers }: TileContextMenuProps) => {
+  const keybinds = useKeybinds();
   const {
     onCut,
     onCopy,
@@ -141,7 +143,7 @@ const TileContextMenu = ({ menu, handlers }: TileContextMenuProps) => {
           }
         />
       ))}
-      {door && <Item label={door.open ? 'Close Door' : 'Open Door'} onClick={() => onSwitchDoor(tile)} />}
+      {door && <Item onClick={() => onSwitchDoor(tile)} label={door.open ? 'Close Door' : 'Open Door'} />}
       {houseId != null && <Item label="Select House" onClick={() => onSelectHouse(houseId)} />}
       {creature && <Item label="Select Creature" onClick={() => onSelectCreature(creature)} />}
 
@@ -151,16 +153,16 @@ const TileContextMenu = ({ menu, handlers }: TileContextMenuProps) => {
       </SubMenu>
 
       <Separator />
-      <Item label="Cut" onClick={onCut} shortcut="Ctrl+X" disabled={!hasSelection} />
-      <Item label="Copy" onClick={onCopy} shortcut="Ctrl+C" disabled={!hasSelection} />
+      <Item label="Cut" onClick={onCut} disabled={!hasSelection} shortcut={keybindLabel(keybinds, 'edit.cut')} />
+      <Item label="Copy" onClick={onCopy} disabled={!hasSelection} shortcut={keybindLabel(keybinds, 'edit.copy')} />
       {item && (
         <>
           <Item label={`Copy Client Id (${item.clientId})`} onClick={() => onCopyText(String(item.clientId))} />
           <Item label={`Copy Server Id (${item.serverId})`} onClick={() => onCopyText(String(item.serverId))} />
         </>
       )}
-      <Item label="Paste" shortcut="Ctrl+V" disabled={!canPaste} onClick={() => onPaste(tile)} />
-      <Item label="Delete" shortcut="Del" onClick={onDelete} disabled={!hasSelection} />
+      <Item label="Paste" disabled={!canPaste} onClick={() => onPaste(tile)} shortcut={keybindLabel(keybinds, 'edit.paste')} />
+      <Item label="Delete" onClick={onDelete} disabled={!hasSelection} shortcut={keybindLabel(keybinds, 'edit.delete')} />
 
       <Separator />
       <Item disabled={!hasSelection} onClick={onAddToReplaceList} label="Add Items to Replace List" />
