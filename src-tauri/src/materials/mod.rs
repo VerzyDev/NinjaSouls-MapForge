@@ -361,6 +361,15 @@ impl Materials {
 		self.brush(id)
 	}
 
+	pub fn is_border_of_ground(&self, ground_server: u16, item_server: u16) -> bool {
+		let Some(ground) = self.ground_brush_for(ground_server) else {
+			return false;
+		};
+		let in_border = |id: u32| self.borders.get(&id).is_some_and(|b| b.tiles.contains(&item_server));
+		ground.borders.iter().any(|b| in_border(b.border_id) || b.specifics.iter().any(|s| s.with == item_server))
+			|| (ground.optional_border_id != 0 && in_border(ground.optional_border_id))
+	}
+
 	pub fn ground_brush_by_name(&self, name: &str) -> Option<&GroundBrush> {
 		self.brush(*self.name_to_id.get(name)?)
 	}

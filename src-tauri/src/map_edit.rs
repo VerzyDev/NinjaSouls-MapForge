@@ -1949,6 +1949,7 @@ pub fn erase_brush(
 	let mut touched: HashSet<u32> = tiles_vec.iter().map(|&(x, y)| chunk_key_of(x, y)).collect();
 	let mut removed: HashSet<(u16, u16)> = HashSet::new();
 	let door_mats = mats.filter(|mt| mt.door_of(server_id).is_some());
+	let is_own_border = |s: u16| mats.is_some_and(|mt| mt.is_border_of_ground(server_id, s));
 	for &(x, y) in &tiles_vec {
 		if let Some(mt) = door_mats {
 			if restore_wall_under_doors(m, mt, otb, z, x, y) {
@@ -1961,6 +1962,11 @@ pub fn erase_brush(
 		stack.retain(|&(_, s)| !same_brush(mats, server_id, s));
 		if stack.len() != before {
 			removed.insert((x, y));
+		}
+		let before = stack.len();
+		stack.retain(|&(_, s)| !is_own_border(s));
+		if stack.len() != before {
+			touched.insert(chunk_key_of(x, y));
 		}
 	}
 
