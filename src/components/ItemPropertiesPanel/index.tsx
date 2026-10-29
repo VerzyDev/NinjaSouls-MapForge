@@ -8,10 +8,10 @@ import { LoadedSprite } from '~/domain/sprite';
 import { loadSprites } from '~/adapter/sprites';
 import { Hint } from '~/components/commons/ui/tooltip';
 import { brushSpriteLayout } from '~/usecase/brushSprite';
-import { SelectedItem } from '~/components/MapCanvas/types';
 import { DragHandleProps } from '~/components/Dock/DockablePanel';
 import { useAssetsBundle } from '~/usecase/context/AssetsContext';
 import { fluidName, TIBIA_FLUIDS } from '~/lib/formats/tibia/fluids';
+import { StackPick, SelectedItem } from '~/components/MapCanvas/types';
 import { Select, SelectItem, SelectValue, SelectTrigger, SelectContent } from '~/components/commons/ui/select';
 import { getTowns, setDoorId, getTileItems, setItemAttrs, TileItemEntry, TilePropertiesPayload } from '~/adapter/map';
 
@@ -21,6 +21,7 @@ import ContainerEditor from './ContainerEditor';
 interface ItemPropertiesHandlers {
   close?: () => void;
   edited?: () => void;
+  pick?: (pick: StackPick) => void;
   status?: (message: string) => void;
 }
 
@@ -115,7 +116,7 @@ const PickRow = ({
 );
 
 const ItemPropertiesPanel = ({ mapId, item, items, itemNames, dragHandle, handlers }: ItemPropertiesPanelProps) => {
-  const { close: onClose, edited: onEdited, status: onStatus } = handlers;
+  const { close: onClose, edited: onEdited, status: onStatus, pick: onPick } = handlers;
   const { assets } = useAssetsBundle();
   const [data, setData] = React.useState<TilePropertiesPayload | null>(null);
   const [selectedIdx, setSelectedIdx] = React.useState(-1);
@@ -259,6 +260,7 @@ const ItemPropertiesPanel = ({ mapId, item, items, itemNames, dragHandle, handle
     }
     setSelectedIdx(i);
     if (data?.items[i]) setDraft(patchFromEntry(data.items[i]));
+    if (item) onPick?.({ x: item.x, y: item.y, z: item.z, stackIdx: i });
   };
 
   const fluidOptions = React.useMemo(() => {

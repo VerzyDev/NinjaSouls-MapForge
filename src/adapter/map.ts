@@ -400,9 +400,10 @@ export async function deleteSelection(
   xs: number[],
   ys: number[],
   all: boolean[],
+  picks: number[],
   automagic: boolean
 ): Promise<DeleteResult> {
-  return invoke<DeleteResult>('delete_selection', { mapId, zs, xs, ys, all, automagic });
+  return invoke<DeleteResult>('delete_selection', { mapId, zs, xs, ys, all, picks, automagic });
 }
 
 export async function copySelection(mapId: number, zs: number[], xs: number[], ys: number[], all: boolean[]): Promise<number> {

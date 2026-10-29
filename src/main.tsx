@@ -64,11 +64,11 @@ import { useAutoSave } from '~/usecase/hooks/Workspace/useAutoSave';
 import { useTool, ToolProvider } from '~/usecase/context/ToolContext';
 import { useMapSpawns } from '~/usecase/hooks/Workspace/useMapSpawns';
 import { useMapHouses } from '~/usecase/hooks/Workspace/useMapHouses';
-import { HoverInfo, SelectedItem } from '~/components/MapCanvas/types';
 import { addWaypoint, nextWaypointName } from '~/usecase/waypointEdits';
 import { useMapCreatures } from '~/usecase/hooks/Workspace/useMapCreatures';
 import { useMapWaypoints } from '~/usecase/hooks/Workspace/useMapWaypoints';
 import { useAppShortcuts } from '~/usecase/hooks/Workspace/useAppShortcuts';
+import { StackPick, HoverInfo, SelectedItem } from '~/components/MapCanvas/types';
 import { AssetsProvider, useAssetsBundle } from '~/usecase/context/AssetsContext';
 import { useReplaceItemWindow } from '~/usecase/hooks/Workspace/useReplaceItemWindow';
 import ImportMapDialog, { HouseImportMode, ImportMapRequest } from '~/components/ImportMapDialog';
@@ -271,6 +271,7 @@ const App = () => {
   const mapCenterRef = React.useRef<((x: number, y: number) => void) | null>(null);
   const mapHighlightRef = React.useRef<((x: number, y: number, z: number, clientId?: number) => void) | null>(null);
   const mapRefetchRef = React.useRef<((tagged: [number, number][]) => void) | null>(null);
+  const stackPickRef = React.useRef<StackPick | null>(null);
   const [importOpen, setImportOpen] = React.useState(false);
   const [importGhost, setImportGhost] = React.useState<{
     width: number;
@@ -323,6 +324,7 @@ const App = () => {
     if (info) cursorRef.current = { x: info.x, y: info.y, z: info.z };
   }, []);
   const handleSelect = React.useCallback((item: SelectedItem | null) => {
+    stackPickRef.current = null;
     setSelectedItem(item);
     statusApiRef.current?.setSelectedItem(item);
   }, []);
@@ -1000,6 +1002,9 @@ const App = () => {
           items={assets.items ?? null}
           handlers={{
             status: handleStatus,
+            pick: (pick) => {
+              stackPickRef.current = pick;
+            },
             close: () => setPropertiesOpen(false),
             edited: () => {
               markActiveDirty();
@@ -1242,6 +1247,7 @@ const App = () => {
             importGhost={importGhost}
             onFloorChange={setFloorZ}
             refetchRef={mapRefetchRef}
+            stackPickRef={stackPickRef}
             initialCenter={active.center}
             paused={!!saving || reloading}
             highlightRef={mapHighlightRef}

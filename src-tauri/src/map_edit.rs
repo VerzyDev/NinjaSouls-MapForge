@@ -2284,13 +2284,14 @@ pub async fn delete_selection(
 	xs: Vec<u16>,
 	ys: Vec<u16>,
 	all: Vec<bool>,
+	picks: Vec<i32>,
 	automagic: bool,
 	otb_state: tauri::State<'_, OtbState>,
 	map_state: tauri::State<'_, MapState>,
 	materials_state: tauri::State<'_, MaterialsState>,
 	placement_state: tauri::State<'_, PlacementState>,
 ) -> Result<DeleteResult, String> {
-	if xs.len() != ys.len() || xs.len() != all.len() || xs.len() != zs.len() {
+	if xs.len() != ys.len() || xs.len() != all.len() || xs.len() != zs.len() || xs.len() != picks.len() {
 		return Err("selection arrays length mismatch".into());
 	}
 
@@ -2325,6 +2326,8 @@ pub async fn delete_selection(
 		let stack = tile_stack_mut(m, z, x, y);
 		if all[i] {
 			stack.clear();
+		} else if picks[i] >= 0 && (picks[i] as usize) < stack.len() {
+			stack.remove(picks[i] as usize);
 		} else {
 			stack.pop();
 		}

@@ -46,6 +46,13 @@ export interface SelectedItem extends HoverItem {
   z: number;
 }
 
+export interface StackPick {
+  x: number;
+  y: number;
+  z: number;
+  stackIdx: number;
+}
+
 export interface HoverInfo {
   x: number;
   y: number;
@@ -130,6 +137,7 @@ export interface MapCanvasProps {
   centerRef?: React.MutableRefObject<((x: number, y: number) => void) | null>;
   highlightRef?: React.MutableRefObject<((x: number, y: number, z: number, clientId?: number) => void) | null>;
   refetchRef?: React.MutableRefObject<((tagged: [number, number][]) => void) | null>;
+  stackPickRef?: React.MutableRefObject<StackPick | null>;
   importGhost?: { width: number; height: number; minZ: number; maxZ: number; preview: HTMLCanvasElement | null } | null;
   onImportDrop?: (pos: Position) => void;
   onImportCancel?: () => void;

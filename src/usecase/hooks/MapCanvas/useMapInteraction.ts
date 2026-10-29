@@ -1423,7 +1423,11 @@ export function useMapInteraction(deps: InteractionDeps) {
     const s = selectionArrays();
     if (s) {
       let count = 0;
-      deleteSelection(inputs.current.map.id, s.zs, s.xs, s.ys, s.all, inputs.current.automagic)
+      const pick = inputs.current.stackPickRef?.current ?? null;
+      const picks = s.xs.map((x, i) =>
+        pick && !s.all[i] && pick.x === x && pick.y === s.ys[i] && pick.z === s.zs[i] ? pick.stackIdx : -1
+      );
+      deleteSelection(inputs.current.map.id, s.zs, s.xs, s.ys, s.all, picks, inputs.current.automagic)
         .then((res) => {
           count = res.removed;
           selection.clear();
