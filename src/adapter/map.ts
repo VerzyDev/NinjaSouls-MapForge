@@ -406,8 +406,15 @@ export async function deleteSelection(
   return invoke<DeleteResult>('delete_selection', { mapId, zs, xs, ys, all, picks, automagic });
 }
 
-export async function copySelection(mapId: number, zs: number[], xs: number[], ys: number[], all: boolean[]): Promise<number> {
-  return invoke<number>('copy_selection', { mapId, zs, xs, ys, all });
+export async function copySelection(
+  mapId: number,
+  zs: number[],
+  xs: number[],
+  ys: number[],
+  all: boolean[],
+  anchorZ: number
+): Promise<number> {
+  return invoke<number>('copy_selection', { mapId, zs, xs, ys, all, anchorZ });
 }
 
 export async function pasteSelection(

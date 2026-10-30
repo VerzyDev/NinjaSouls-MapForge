@@ -43,8 +43,8 @@ use crate::scripting::ScopedLua;
 use crate::{CopyBufferState, MapState, MaterialsState, OtbState, PlaceFlags, PlacementState};
 
 pub struct CopyTile {
-	pub dx: u16,
-	pub dy: u16,
+	pub dx: i32,
+	pub dy: i32,
 	pub dz: i8,
 	pub items: Vec<(u16, u16)>,
 }
@@ -2484,6 +2484,7 @@ pub fn copy_selection(
 	xs: Vec<u16>,
 	ys: Vec<u16>,
 	all: Vec<bool>,
+	anchor_z: u8,
 	otb_state: tauri::State<OtbState>,
 	map_state: tauri::State<MapState>,
 	clip_state: tauri::State<CopyBufferState>,
@@ -2506,9 +2507,12 @@ pub fn copy_selection(
 		m.ensure_tiles(z, tiles, otb)?;
 	}
 
-	let min_x = xs.iter().copied().min().unwrap_or(0);
-	let min_y = ys.iter().copied().min().unwrap_or(0);
-	let min_z = zs.iter().copied().min().unwrap_or(0);
+	let on_anchor: Vec<usize> = (0..xs.len()).filter(|&i| zs[i] == anchor_z).collect();
+	let (min_x, min_y) = if on_anchor.is_empty() {
+		(xs.iter().copied().min().unwrap_or(0), ys.iter().copied().min().unwrap_or(0))
+	} else {
+		(on_anchor.iter().map(|&i| xs[i]).min().unwrap_or(0), on_anchor.iter().map(|&i| ys[i]).min().unwrap_or(0))
+	};
 
 	let mut tiles: Vec<CopyTile> = Vec::new();
 	for i in 0..xs.len() {
@@ -2518,7 +2522,7 @@ pub fn copy_selection(
 			continue;
 		}
 		let items = if all[i] { stack } else { vec![*stack.last().unwrap()] };
-		tiles.push(CopyTile { dx: x - min_x, dy: y - min_y, dz: (z as i16 - min_z as i16) as i8, items });
+		tiles.push(CopyTile { dx: x as i32 - min_x as i32, dy: y as i32 - min_y as i32, dz: (z as i16 - anchor_z as i16) as i8, items });
 	}
 
 	let count = tiles.len() as u32;
@@ -2555,10 +2559,10 @@ pub fn paste_selection(
 	let m = guard.maps.get_mut(&map_id).ok_or("map not loaded")?;
 
 	let target = |tile: &CopyTile| -> Option<(u8, u16, u16)> {
-		let tx = x as u32 + tile.dx as u32;
-		let ty = y as u32 + tile.dy as u32;
+		let tx = x as i32 + tile.dx;
+		let ty = y as i32 + tile.dy;
 		let tz = z as i32 + tile.dz as i32;
-		if tx > u16::MAX as u32 || ty > u16::MAX as u32 || !(0..=15).contains(&tz) {
+		if !(0..=u16::MAX as i32).contains(&tx) || !(0..=u16::MAX as i32).contains(&ty) || !(0..=15).contains(&tz) {
 			None
 		} else {
 			Some((tz as u8, tx as u16, ty as u16))

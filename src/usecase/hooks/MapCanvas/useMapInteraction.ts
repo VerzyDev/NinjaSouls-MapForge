@@ -1987,13 +1987,14 @@ export function useMapInteraction(deps: InteractionDeps) {
   function captureClipboardGhost(): ClipboardGhostTile[] | null {
     const sel = [...selection.entries.current.values()];
     if (sel.length === 0) return null;
+    const anchorZ = inputs.current.floorZ;
+    const onAnchor = sel.filter((t) => t.z === anchorZ);
+    const origin = onAnchor.length > 0 ? onAnchor : sel;
     let minX = Infinity;
     let minY = Infinity;
-    let minZ = Infinity;
-    for (const t of sel) {
+    for (const t of origin) {
       if (t.x < minX) minX = t.x;
       if (t.y < minY) minY = t.y;
-      if (t.z < minZ) minZ = t.z;
     }
     const out: ClipboardGhostTile[] = [];
     for (const t of sel) {
@@ -2006,7 +2007,7 @@ export function useMapInteraction(deps: InteractionDeps) {
       const from = t.all ? start : end - 1;
       const items: { clientId: number; count: number }[] = [];
       for (let ii = from; ii < end; ii++) items.push({ clientId: ct.clientIds[ii], count: ct.counts[ii] });
-      out.push({ dx: t.x - minX, dy: t.y - minY, dz: t.z - minZ, items });
+      out.push({ dx: t.x - minX, dy: t.y - minY, dz: t.z - anchorZ, items });
     }
     return out.length > 0 ? out : null;
   }
@@ -2025,7 +2026,7 @@ export function useMapInteraction(deps: InteractionDeps) {
     }
     const ghost = clipboardGhostSource.current;
     if (ghost?.length === 1 && ghost[0].items.length === 1) copyText(String(ghost[0].items[0].clientId));
-    return copySelection(inputs.current.map.id, s.zs, s.xs, s.ys, s.all)
+    return copySelection(inputs.current.map.id, s.zs, s.xs, s.ys, s.all, inputs.current.floorZ)
       .then((n) => {
         clipboardCount.current = n;
         if (!silent) emit(`Copied ${plural(n, 'tile')}`);
@@ -2062,7 +2063,6 @@ export function useMapInteraction(deps: InteractionDeps) {
       });
   }
 
-  function cutSelected() {
   function selectFloors(baseZ: number, range: FloorRange) {
     setMenu(null);
     const footprint = [...selection.entries.current.values()].filter((t) => t.z === baseZ);
@@ -2101,6 +2101,7 @@ export function useMapInteraction(deps: InteractionDeps) {
     emit(`Selected ${plural(tiles.length, 'tile')} across ${plural(floors, 'floor')}`);
   }
 
+  function cutSelected() {
     void copySelected(true).then((n) => {
       if (n === 0) {
         emit('Nothing to cut');
@@ -2411,6 +2412,15 @@ export function useMapInteraction(deps: InteractionDeps) {
       setHouseExit(tileAt(e));
       return;
     }
+    if (tool === 'custom_zone') {
+      const mode = inputs.current.customZoneMode;
+      if (mode !== 'polygon') scene.customZonePolygon.current = null;
+      if (e.altKey) pickCustomZoneAt(tileAt(e));
+      else if (mode === 'fill') void customZoneFill(tileAt(e), !e.ctrlKey);
+      else if (mode === 'polygon') customZonePolygonClick(tileAt(e), e.ctrlKey);
+      else beginCustomZoneStroke(tileAt(e), !e.ctrlKey);
+      return;
+    }
     if (tool === 'brush' && brush && brush.kind === 'creature') {
       beginCreatureStroke(e);
       return;
@@ -2457,15 +2467,6 @@ export function useMapInteraction(deps: InteractionDeps) {
       if (!onSel && !hoverAt(pos).hasTile) {
         selection.clear();
         inputs.current.onSelect(null);
-    if (tool === 'custom_zone') {
-      const mode = inputs.current.customZoneMode;
-      if (mode !== 'polygon') scene.customZonePolygon.current = null;
-      if (e.altKey) pickCustomZoneAt(tileAt(e));
-      else if (mode === 'fill') void customZoneFill(tileAt(e), !e.ctrlKey);
-      else if (mode === 'polygon') customZonePolygonClick(tileAt(e), e.ctrlKey);
-      else beginCustomZoneStroke(tileAt(e), !e.ctrlKey);
-      return;
-    }
         return;
       }
       if (!onSel) selection.selectTile(pos, false);
@@ -2519,6 +2520,8 @@ export function useMapInteraction(deps: InteractionDeps) {
       paintZoneAt(tileAt(e));
     } else if (housePainting.current) {
       housePaintAt(tileAt(e));
+    } else if (customZoneStroke.current) {
+      customZonePaintAt(tileAt(e));
     } else if (scene.erasing.current) {
       if (scene.eraseBrushId.current != null) eraseBrushAt(tileAt(e), scene.eraseBrushId.current);
       else eraseAt(tileAt(e));
@@ -2565,8 +2568,6 @@ export function useMapInteraction(deps: InteractionDeps) {
       return;
     }
     if (scene.huntAreaDrag.current) {
-    } else if (customZoneStroke.current) {
-      customZonePaintAt(tileAt(e));
       const d = scene.huntAreaDrag.current;
       scene.huntAreaDrag.current = null;
       const area = {
@@ -2600,6 +2601,8 @@ export function useMapInteraction(deps: InteractionDeps) {
         paintZoneBox(bs, !bs.additive);
       } else if (tool === 'house') {
         housePaintBox(bs, !bs.additive);
+      } else if (tool === 'custom_zone') {
+        customZonePaintBox(bs, !bs.additive);
       } else {
         const boxes = selectionFloorBoxes(
           bs.startTile.z,
@@ -2625,6 +2628,7 @@ export function useMapInteraction(deps: InteractionDeps) {
 
   function onDoubleClick(e: React.MouseEvent) {
     if (inputs.current.activeTool === 'pen') penFinish();
+    if (inputs.current.activeTool === 'custom_zone' && scene.customZonePolygon.current) finishCustomZonePolygon(!e.ctrlKey);
   }
 
   function onMouseLeave() {
@@ -2646,8 +2650,6 @@ export function useMapInteraction(deps: InteractionDeps) {
 
   function goTo(pos: Position) {
     camera.centerOn(pos);
-      } else if (tool === 'custom_zone') {
-        customZonePaintBox(bs, !bs.additive);
     inputs.current.onFloorChange(pos.z);
     setMenu(null);
     setGotoForm(null);
@@ -2673,7 +2675,6 @@ export function useMapInteraction(deps: InteractionDeps) {
     if (inputs.current.activeTool === 'pen') {
       penCancel();
       return;
-    if (inputs.current.activeTool === 'custom_zone' && scene.customZonePolygon.current) finishCustomZonePolygon(!e.ctrlKey);
     }
     enterSelectionMode();
     const tile = tileAt(e);
@@ -2854,6 +2855,26 @@ export function useMapInteraction(deps: InteractionDeps) {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+      if (inputs.current.activeTool === 'custom_zone' && scene.customZonePolygon.current) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finishCustomZonePolygon(!e.ctrlKey);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          scene.customZonePolygon.current = null;
+          emit('Polygon cancelled');
+          return;
+        }
+        if (e.key === 'Backspace') {
+          e.preventDefault();
+          const points = scene.customZonePolygon.current.points;
+          points.pop();
+          if (!points.length) scene.customZonePolygon.current = null;
+          return;
+        }
+      }
       if (inputs.current.activeTool === 'pen') {
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -2900,26 +2921,6 @@ export function useMapInteraction(deps: InteractionDeps) {
       else if (id === 'edit.cut') cutSelected();
       else if (clipboardCount.current === 0) emit('Clipboard empty');
       else {
-      if (inputs.current.activeTool === 'custom_zone' && scene.customZonePolygon.current) {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          finishCustomZonePolygon(!e.ctrlKey);
-          return;
-        }
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          scene.customZonePolygon.current = null;
-          emit('Polygon cancelled');
-          return;
-        }
-        if (e.key === 'Backspace') {
-          e.preventDefault();
-          const points = scene.customZonePolygon.current.points;
-          points.pop();
-          if (!points.length) scene.customZonePolygon.current = null;
-          return;
-        }
-      }
         scene.pasteGhost.current = clipboardGhostSource.current ?? [];
         emit('Click to paste, Esc to cancel');
       }
@@ -2986,8 +2987,8 @@ export function useMapInteraction(deps: InteractionDeps) {
       setMenu(null);
     },
     addToReplaceList,
-    copyText: (text: string) => {
     selectFloors,
+    copyText: (text: string) => {
       copyText(text);
       emit('Copied to clipboard');
       setMenu(null);
