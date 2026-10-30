@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { loadKeybinds, saveKeybinds } from '~/adapter/preferences';
-import { Keybinds, KeybindId, comboFromEvent, DEFAULT_KEYBINDS } from '~/domain/keybinds';
+import { Keybinds, KeybindId, comboFromEvent, comboFromMouse, mouseButtonName, DEFAULT_KEYBINDS } from '~/domain/keybinds';
 
 let current: Keybinds = DEFAULT_KEYBINDS;
 const listeners = new Set<() => void>();
@@ -18,7 +18,35 @@ const subscribe = (listener: () => void) => {
 
 export const getKeybinds = () => current;
 
-export const initKeybinds = () => loadKeybinds().then(notify);
+const isBound = (combo: string) => Object.values(current).some((combos) => combos.includes(combo));
+
+const routeMouseButton = (e: MouseEvent) => {
+  const name = mouseButtonName(e.button);
+  if (!name) return;
+  const synthetic = new KeyboardEvent('keydown', {
+    code: name,
+    ctrlKey: e.ctrlKey,
+    shiftKey: e.shiftKey,
+    altKey: e.altKey,
+    metaKey: e.metaKey,
+    cancelable: true
+  });
+  window.dispatchEvent(synthetic);
+  if (synthetic.defaultPrevented || isBound(comboFromMouse(e) ?? '')) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+};
+
+const blockHistoryButtons = (e: MouseEvent) => {
+  if (e.button === 3 || e.button === 4) e.preventDefault();
+};
+
+export const initKeybinds = () => {
+  window.addEventListener('mousedown', routeMouseButton, true);
+  window.addEventListener('mouseup', blockHistoryButtons, true);
+  return loadKeybinds().then(notify);
+};
 
 export const updateKeybinds = (next: Keybinds) => {
   notify(next);

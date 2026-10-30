@@ -121,11 +121,27 @@ const keyName = (e: KeyboardEvent): string | null => {
   return CODE_NAMES[code] ?? code;
 };
 
+const MOUSE_BUTTON_NAMES: Record<number, string> = {
+  1: 'MouseMiddle',
+  3: 'MouseBack',
+  4: 'MouseForward'
+};
+
+export const mouseButtonName = (button: number): string | undefined => MOUSE_BUTTON_NAMES[button];
+
+const modifierPrefix = (e: KeyboardEvent | MouseEvent): string[] =>
+  [e.ctrlKey || e.metaKey ? 'Ctrl' : '', e.shiftKey ? 'Shift' : '', e.altKey ? 'Alt' : ''].filter(Boolean);
+
 export const comboFromEvent = (e: KeyboardEvent): string | null => {
   const key = keyName(e);
   if (!key) return null;
-  const mods = [e.ctrlKey || e.metaKey ? 'Ctrl' : '', e.shiftKey ? 'Shift' : '', e.altKey ? 'Alt' : ''].filter(Boolean);
-  return [...mods, key].join('+');
+  return [...modifierPrefix(e), key].join('+');
+};
+
+export const comboFromMouse = (e: MouseEvent): string | null => {
+  const name = mouseButtonName(e.button);
+  if (!name) return null;
+  return [...modifierPrefix(e), name].join('+');
 };
 
 export const comboParts = (combo: string): string[] => combo.split(/\+(?!$)/);

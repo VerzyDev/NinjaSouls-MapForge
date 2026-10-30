@@ -91,7 +91,9 @@ const KeybindRow = ({ label, combos, isDefault, recording, conflicts, onRecord, 
         );
       })}
       {recording ? (
-        <span className="rounded border border-primary px-1.5 py-0.5 text-[10px] leading-none text-primary">Press keys...</span>
+        <span className="rounded border border-primary px-1.5 py-0.5 text-[10px] leading-none text-primary">
+          Press keys or a mouse button...
+        </span>
       ) : (
         <button
           onClick={onRecord}
@@ -176,7 +178,8 @@ const ShortcutsDialog = ({ open, onOpenChange }: ShortcutsDialogProps) => {
         <DialogHeader className="border-b border-border/50 px-6 py-4">
           <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogDescription className="text-xs">
-            Hover a shortcut to add, remove or restore keys. Mouse, Tab, Esc, Enter, Space, arrows and WASD are fixed.
+            Hover a shortcut to add, remove or restore keys. Middle and side mouse buttons can be recorded too. Left and right
+            click, Tab, Esc, Enter, Space, arrows and WASD are fixed.
           </DialogDescription>
         </DialogHeader>
 
