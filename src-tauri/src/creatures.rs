@@ -182,16 +182,16 @@ fn entry_from_file(path: &Path, is_npc: bool, index_name: Option<&str>) -> Optio
 	})
 }
 
-fn collect_xml(dir: &Path, out: &mut Vec<PathBuf>) {
+fn collect_files(dir: &Path, extension: &str, out: &mut Vec<PathBuf>) {
 	let Ok(entries) = fs::read_dir(dir) else { return };
 	for entry in entries.flatten() {
 		let path = entry.path();
 		if path.is_dir() {
 			let name = path.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
 			if !SKIP_DIR_NAMES.contains(&name.as_str()) {
-				collect_xml(&path, out);
+				collect_files(&path, extension, out);
 			}
-		} else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("xml")) {
+		} else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case(extension)) {
 			out.push(path);
 		}
 	}
@@ -220,15 +220,70 @@ fn scan_monsters(monster_dir: &Path) -> Vec<CreatureEntry> {
 			.collect(),
 		None => {
 			let mut files = Vec::new();
-			collect_xml(monster_dir, &mut files);
+			collect_files(monster_dir, "xml", &mut files);
 			files.par_iter().filter_map(|p| entry_from_file(p, false, None)).collect()
 		}
 	}
 }
 
+fn lua_string_arg(text: &str, call: &str) -> Option<String> {
+	let rest = &text[text.find(call)? + call.len()..];
+	let rest = rest.trim_start().strip_prefix('(')?.trim_start().strip_prefix('"')?;
+	Some(rest[..rest.find('"')?].to_string())
+}
+
+fn lua_table_number(table: &str, key: &str) -> Option<u16> {
+	let mut from = 0;
+	while let Some(offset) = table[from..].find(key) {
+		let start = from + offset;
+		let end = start + key.len();
+		from = end;
+		let boundary_before = table[..start].chars().next_back().map_or(true, |c| !c.is_alphanumeric() && c != '_');
+		let Some(value) = table[end..].trim_start().strip_prefix('=') else { continue };
+		if !boundary_before {
+			continue;
+		}
+		let digits: String = value.trim_start().chars().take_while(char::is_ascii_digit).collect();
+		if let Ok(number) = digits.parse() {
+			return Some(number);
+		}
+	}
+	None
+}
+
+fn lua_entry_from_file(path: &Path) -> Option<CreatureEntry> {
+	let text = fs::read_to_string(path).ok()?;
+	let name = lua_string_arg(&text, "createMonsterType")?;
+	let after = &text[text.find("monster.outfit")?..];
+	let table = &after[after.find('{')?..after.find('}')?];
+	let number = |key: &str| lua_table_number(table, key).unwrap_or(0);
+	Some(CreatureEntry {
+		name,
+		is_npc: false,
+		look_type: number("lookType"),
+		look_item: number("lookTypeEx"),
+		head: number("lookHead"),
+		body: number("lookBody"),
+		legs: number("lookLegs"),
+		feet: number("lookFeet"),
+		addons: number("lookAddons"),
+		mount: number("lookMount"),
+	})
+}
+
+fn scan_lua_monsters(monster_dir: &Path) -> Vec<CreatureEntry> {
+	let mut files = Vec::new();
+	collect_files(monster_dir, "lua", &mut files);
+	files
+		.par_iter()
+		.filter(|p| !p.file_name().is_some_and(|n| n.to_string_lossy().starts_with('#')))
+		.filter_map(|p| lua_entry_from_file(p))
+		.collect()
+}
+
 fn scan_npcs(npc_dir: &Path) -> Vec<CreatureEntry> {
 	let mut files = Vec::new();
-	collect_xml(npc_dir, &mut files);
+	collect_files(npc_dir, "xml", &mut files);
 	files.par_iter().filter_map(|p| entry_from_file(p, true, None)).collect()
 }
 
@@ -238,8 +293,13 @@ pub fn scan_creatures(monster_dir: Option<String>, npc_dir: Option<String>) -> V
 		.as_deref()
 		.map(|d| scan_monsters(Path::new(d)))
 		.unwrap_or_default();
+	let lua_monsters = monster_dir
+		.as_deref()
+		.map(|d| scan_lua_monsters(Path::new(d)))
+		.unwrap_or_default();
 	let npcs = npc_dir.as_deref().map(|d| scan_npcs(Path::new(d))).unwrap_or_default();
 	let mut all = monsters;
+	all.extend(lua_monsters);
 	all.extend(npcs);
 	all
 }
@@ -293,6 +353,23 @@ mod tests {
 		let _ = fs::remove_dir_all(&dir);
 		fs::create_dir_all(dir.join("items")).unwrap();
 		dir
+	}
+
+	#[test]
+	fn a_lua_monster_yields_its_name_and_outfit() {
+		let root = temp_root("lua-monster");
+		let file = root.join("blightling.lua");
+		fs::write(
+			&file,
+			"local mtype = Game.createMonsterType(\"Blightling\")
+monster.outfit = { lookType = 93, lookHead = 94, lookAddons = 2 }
+",
+		)
+		.unwrap();
+
+		let entry = lua_entry_from_file(&file).unwrap();
+		assert_eq!(entry.name, "Blightling");
+		assert_eq!((entry.look_type, entry.head, entry.addons, entry.look_item), (93, 94, 2, 0));
 	}
 
 	#[test]
