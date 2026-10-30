@@ -24,6 +24,9 @@ pub fn read_file_text(path: String) -> Result<String, String> {
 
 #[tauri::command]
 pub fn write_file_text(path: String, contents: String) -> Result<(), String> {
+	if let Some(dir) = PathBuf::from(&path).parent().filter(|d| !d.as_os_str().is_empty()) {
+		fs::create_dir_all(dir).map_err(|e| format!("Failed to create folder {}: {}", dir.display(), e))?;
+	}
 	fs::write(&path, contents).map_err(|e| format!("Failed to write file {}: {}", path, e))
 }
 
