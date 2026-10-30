@@ -51,6 +51,7 @@ export interface Selection {
   addSpawn: (pos: Position) => void;
   addCreature: (pos: Position) => void;
   setTiles: (list: SelTile[]) => void;
+  dropMarkersOffFloor: (keep: number | null) => void;
   snapshot: () => SelectionSnapshot;
   restore: (s: SelectionSnapshot) => void;
   clear: () => void;
@@ -163,6 +164,16 @@ export function useSelection(meshes: ChunkMeshCache): Selection {
     meshes.discardTiles(list);
   }
 
+  function dropMarkersOffFloor(keep: number | null) {
+    for (const map of [spawns, creatures]) {
+      for (const [key, pos] of map.current) {
+        if (pos.z === keep) continue;
+        map.current.delete(key);
+        meshes.discardAt(pos.x, pos.y, pos.z);
+      }
+    }
+  }
+
   function snapshot(): SelectionSnapshot {
     return {
       entries: Array.from(entries.current.values()).map((t) => ({ ...t })),
@@ -204,6 +215,7 @@ export function useSelection(meshes: ChunkMeshCache): Selection {
     addSpawn,
     addCreature,
     setTiles,
+    dropMarkersOffFloor,
     snapshot,
     restore,
     clear

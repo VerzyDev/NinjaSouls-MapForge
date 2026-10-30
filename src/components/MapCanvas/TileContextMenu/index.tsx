@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react';
 import { Position } from '~/domain/map';
 import { ITEM_BRUSH_LABELS } from '~/domain/palette';
 import { useKeybinds, keybindLabel } from '~/usecase/keybinds';
+import { FloorRange, FloorPreset, MAP_MAX_LAYER, MAP_MIN_LAYER, floorPresetRange } from '~/usecase/floors';
 
 import { HoverItem, TileBrushRef, ContextMenuState } from '../types';
 
@@ -24,6 +25,7 @@ export interface TileContextHandlers {
   onWaypointProperties: (pos: Position) => void;
   onAddWaypoint: (pos: Position) => void;
   onAddToReplaceList: () => void;
+  onSelectFloors: (baseZ: number, range: FloorRange) => void;
   onSwitchDoor: (tile: Position) => void;
   onItemProperties?: () => void;
 }
@@ -69,6 +71,49 @@ const SubMenu = ({ label, children, openLeft }: { label: string; children: React
   </div>
 );
 
+const FLOOR_PRESETS: { preset: FloorPreset; label: string }[] = [
+  { preset: 'current', label: 'Current Floor Only' },
+  { preset: 'above', label: 'This and Floors Above' },
+  { preset: 'below', label: 'This and Floors Below' },
+  { preset: 'visible', label: 'Visible Floors' },
+  { preset: 'all', label: 'All Floors' }
+];
+
+const clampFloor = (z: number) => Math.min(MAP_MAX_LAYER, Math.max(MAP_MIN_LAYER, Math.round(z)));
+
+const FloorRangeForm = ({ current, onApply }: { current: number; onApply: (range: FloorRange) => void }) => {
+  const [from, setFrom] = React.useState(current);
+  const [to, setTo] = React.useState(current);
+  const input = (value: number, set: (z: number) => void) => (
+    <input
+      type="number"
+      value={value}
+      min={MAP_MIN_LAYER}
+      max={MAP_MAX_LAYER}
+      onChange={(e) => set(clampFloor(Number(e.target.value) || 0))}
+      className="w-12 rounded border border-border bg-background px-1 py-0.5 text-xs"
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') onApply({ startZ: from, endZ: to });
+      }}
+    />
+  );
+  return (
+    <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs">
+      <span className="text-muted-foreground">From</span>
+      {input(from, setFrom)}
+      <span className="text-muted-foreground">to</span>
+      {input(to, setTo)}
+      <button
+        onClick={() => onApply({ startZ: from, endZ: to })}
+        className="ml-auto rounded bg-accent px-2 py-0.5 hover:bg-accent/70"
+      >
+        Apply
+      </button>
+    </div>
+  );
+};
+
 const TileContextMenu = ({ menu, handlers }: TileContextMenuProps) => {
   const keybinds = useKeybinds();
   const {
@@ -87,6 +132,7 @@ const TileContextMenu = ({ menu, handlers }: TileContextMenuProps) => {
     onSelectCreature,
     onAddWaypoint,
     onAddToReplaceList,
+    onSelectFloors,
     onSwitchDoor,
     onItemProperties,
     onWaypointProperties
@@ -163,6 +209,16 @@ const TileContextMenu = ({ menu, handlers }: TileContextMenuProps) => {
       )}
       <Item label="Paste" disabled={!canPaste} onClick={() => onPaste(tile)} shortcut={keybindLabel(keybinds, 'edit.paste')} />
       <Item label="Delete" onClick={onDelete} disabled={!hasSelection} shortcut={keybindLabel(keybinds, 'edit.delete')} />
+
+      {hasSelection && (
+        <SubMenu openLeft={flipX} label="Select Floors...">
+          {FLOOR_PRESETS.map(({ preset, label }) => (
+            <Item key={preset} label={label} onClick={() => onSelectFloors(tile.z, floorPresetRange(tile.z, preset))} />
+          ))}
+          <Separator />
+          <FloorRangeForm current={tile.z} onApply={(range) => onSelectFloors(tile.z, range)} />
+        </SubMenu>
+      )}
 
       <Separator />
       <Item disabled={!hasSelection} onClick={onAddToReplaceList} label="Add Items to Replace List" />

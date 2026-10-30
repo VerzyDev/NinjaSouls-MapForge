@@ -491,6 +491,7 @@ const MapCanvas = (props: MapCanvasProps) => {
             onSelectTileBrush: interaction.selectTileBrush,
             onSpawnProperties: interaction.spawnProperties,
             onAddToReplaceList: interaction.addToReplaceList,
+            onSelectFloors: interaction.selectFloors,
             onSwitchDoor: interaction.switchDoorAt,
             onCreatureProperties: interaction.creatureProperties,
             onWaypointProperties: interaction.waypointProperties

@@ -27,6 +27,23 @@ export function visibleFloorRange(current: number): FloorRange {
 
 export type SelectionMode = 'current' | 'lower' | 'visible';
 
+export type FloorPreset = 'current' | 'above' | 'below' | 'visible' | 'all';
+
+export function floorPresetRange(current: number, preset: FloorPreset): FloorRange {
+  switch (preset) {
+    case 'current':
+      return { startZ: current, endZ: current };
+    case 'above':
+      return { startZ: MAP_MIN_LAYER, endZ: current };
+    case 'below':
+      return { startZ: current, endZ: MAP_MAX_LAYER };
+    case 'visible':
+      return { startZ: current, endZ: visibleFloorRange(current).startZ };
+    case 'all':
+      return { startZ: MAP_MIN_LAYER, endZ: MAP_MAX_LAYER };
+  }
+}
+
 export interface FloorBox {
   z: number;
   ax: number;

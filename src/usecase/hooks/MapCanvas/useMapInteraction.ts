@@ -9,7 +9,6 @@ import { mapClientIds } from '~/adapter/assets';
 import { generateApply } from '~/adapter/biomes';
 import { brushForItem } from '~/adapter/palette';
 import { matchKeybind } from '~/usecase/keybinds';
-import { selectionFloorBoxes } from '~/usecase/floors';
 import { readWalkableMask } from '~/usecase/hunt/mask';
 import { buildItemPreview } from '~/usecase/itemPreview';
 import { planGeneration } from '~/lib/generator/generate';
@@ -21,6 +20,7 @@ import { MountainOptions, ResolvedMountain } from '~/domain/mountain';
 import { GenPlan, ResolvedBiome, GenerateOptions } from '~/domain/biome';
 import { ActiveBrush, PaletteBrush, ItemBrushKind } from '~/domain/palette';
 import { MapSpawns, emptyMapSpawns, buildMapSpawns } from '~/domain/creature';
+import { FloorRange, floorShift, selectionFloorBoxes } from '~/usecase/floors';
 import { HuntMeta, HuntPreviewParams } from '~/usecase/context/ToolContext/types';
 import { buildRoute, connectRoute, reachableFrom } from '~/lib/generator/huntRoute';
 import { brushFootprint, clampBrushSize, BRUSH_SIZE_STEP } from '~/lib/brushFootprint';
@@ -1941,7 +1941,14 @@ export function useMapInteraction(deps: InteractionDeps) {
     return { zs: kept.map((t) => t.z), xs: kept.map((t) => t.x), ys: kept.map((t) => t.y), all: kept.map((t) => t.all) };
   }
 
-  function selectMarkersInBox(z: number, ax: number, ay: number, bx: number, by: number) {
+  function selectMarkersInBox(
+    z: number,
+    ax: number,
+    ay: number,
+    bx: number,
+    by: number,
+    within: (x: number, y: number) => boolean = () => true
+  ) {
     const data = inputs.current.spawns;
     if (!data) return;
     const minX = Math.min(ax, bx);
@@ -1951,7 +1958,7 @@ export function useMapInteraction(deps: InteractionDeps) {
     const areas = data.areasByZ.get(z);
     if (areas) {
       for (const a of areas) {
-        if (a.x >= minX && a.x <= maxX && a.y >= minY && a.y <= maxY) selection.addSpawn({ x: a.x, y: a.y, z });
+        if (a.x >= minX && a.x <= maxX && a.y >= minY && a.y <= maxY && within(a.x, a.y)) selection.addSpawn({ x: a.x, y: a.y, z });
       }
     }
     const minCx = Math.floor(minX / CHUNK);
@@ -1963,7 +1970,7 @@ export function useMapInteraction(deps: InteractionDeps) {
         const arr = data.byChunk.get(`${z},${cx},${cy}`);
         if (!arr) continue;
         for (const c of arr) {
-          if (c.x >= minX && c.x <= maxX && c.y >= minY && c.y <= maxY) selection.addCreature({ x: c.x, y: c.y, z });
+          if (c.x >= minX && c.x <= maxX && c.y >= minY && c.y <= maxY && within(c.x, c.y)) selection.addCreature({ x: c.x, y: c.y, z });
         }
       }
     }
@@ -2056,6 +2063,44 @@ export function useMapInteraction(deps: InteractionDeps) {
   }
 
   function cutSelected() {
+  function selectFloors(baseZ: number, range: FloorRange) {
+    setMenu(null);
+    const footprint = [...selection.entries.current.values()].filter((t) => t.z === baseZ);
+    if (footprint.length === 0) {
+      emit('Nothing selected on this floor');
+      return;
+    }
+    const fromZ = Math.min(range.startZ, range.endZ);
+    const toZ = Math.max(range.startZ, range.endZ);
+    const shift = inputs.current.compensateSelection ? floorShift() : { x: 0, y: 0 };
+    const tiles: SelTile[] = [];
+    selection.dropMarkersOffFloor(baseZ >= fromZ && baseZ <= toZ ? baseZ : null);
+    for (let z = fromZ; z <= toZ; z++) {
+      const dx = (z - baseZ) * shift.x;
+      const dy = (z - baseZ) * shift.y;
+      const keys = new Set<string>();
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const t of footprint) {
+        const x = t.x - dx;
+        const y = t.y - dy;
+        if (x < 0 || y < 0) continue;
+        tiles.push({ x, y, z, all: z === baseZ ? t.all : true });
+        keys.add(`${x},${y}`);
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+      if (z !== baseZ && keys.size > 0) selectMarkersInBox(z, minX, minY, maxX, maxY, (x, y) => keys.has(`${x},${y}`));
+    }
+    selection.setTiles(tiles);
+    const floors = toZ - fromZ + 1;
+    emit(`Selected ${plural(tiles.length, 'tile')} across ${plural(floors, 'floor')}`);
+  }
+
     void copySelected(true).then((n) => {
       if (n === 0) {
         emit('Nothing to cut');
@@ -2942,6 +2987,7 @@ export function useMapInteraction(deps: InteractionDeps) {
     },
     addToReplaceList,
     copyText: (text: string) => {
+    selectFloors,
       copyText(text);
       emit('Copied to clipboard');
       setMenu(null);
