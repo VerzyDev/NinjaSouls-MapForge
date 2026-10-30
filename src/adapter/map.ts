@@ -798,3 +798,15 @@ export async function containerAddItem(loc: ContainerLoc, serverId: number): Pro
 export async function containerRemoveItem(loc: ContainerLoc, childIdx: number): Promise<void> {
   await invoke('container_remove_item', { ...loc, childIdx });
 }
+
+export async function floodWalkable(mapId: number, z: number, x: number, y: number, stop: number[]): Promise<Position[]> {
+  const response = await invoke<Uint8Array | ArrayBuffer>('flood_walkable', { mapId, z, x, y, stop });
+  const u8 = toUint8(response);
+  const view = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const count = view.getUint32(0, true);
+  const out: Position[] = new Array(count);
+  for (let i = 0; i < count; i++) {
+    out[i] = { x: view.getUint16(4 + i * 4, true), y: view.getUint16(6 + i * 4, true), z };
+  }
+  return out;
+}

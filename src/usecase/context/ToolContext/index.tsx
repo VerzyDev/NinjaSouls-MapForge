@@ -24,6 +24,7 @@ import {
   HuntPreviewSignal,
   ToolProviderProps,
   HuntRescatterSignal,
+  CustomZoneMode,
   PaletteCategorySignal
 } from './types';
 
@@ -86,6 +87,9 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
   activeTileRef.current = activeTile;
   secondaryTileRef.current = secondaryTile;
   const [activeHouseId, setActiveHouse] = React.useState<number | null>(null);
+  const [activeCustomZoneId, setActiveCustomZone] = React.useState<number | null>(null);
+  const [customZoneAllFloors, setCustomZoneAllFloors] = React.useState(true);
+  const [customZoneMode, setCustomZoneMode] = React.useState<CustomZoneMode>('brush');
   const [pickingPosition, setPickingPosition] = React.useState(false);
   const [pinPosition, setPinPosition] = React.useState<Position | null>(null);
   const [ctrlErase, setCtrlErase] = React.useState(false);
@@ -295,6 +299,9 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
       brushShape,
       doodadThickness,
       activeHouseId,
+      activeCustomZoneId,
+      customZoneAllFloors,
+      customZoneMode,
       pickingPosition,
       setPickingPosition,
       pinPosition,
@@ -339,6 +346,9 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
       setBrushShape,
       setDoodadThickness,
       setActiveHouse,
+      setActiveCustomZone,
+      setCustomZoneAllFloors,
+      setCustomZoneMode,
       setEraserMode,
       revealInPalette,
       setPaletteCategory,
@@ -356,6 +366,9 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
       doodadThickness,
       setDoodadThickness,
       activeHouseId,
+      activeCustomZoneId,
+      customZoneAllFloors,
+      customZoneMode,
       pickingPosition,
       setPickingPosition,
       pinPosition,
@@ -399,6 +412,9 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
       setBrushSize,
       setBrushShape,
       setActiveHouse,
+      setActiveCustomZone,
+      setCustomZoneAllFloors,
+      setCustomZoneMode,
       setEraserMode,
       revealInPalette,
       setPaletteCategory,

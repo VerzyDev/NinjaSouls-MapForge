@@ -7,6 +7,8 @@ import { ResolvedBiome, GenerateOptions } from '~/domain/biome';
 import { ActiveBrush, PaletteCategoryId } from '~/domain/palette';
 import { MountainOptions, ResolvedMountain } from '~/domain/mountain';
 
+export type CustomZoneMode = 'brush' | 'fill' | 'polygon';
+
 export interface GenerateSignal {
   biomes: ResolvedBiome[];
   opts: GenerateOptions;
@@ -97,6 +99,9 @@ export interface ToolContextValue {
   brushShape: BrushShape;
   doodadThickness: number | null;
   activeHouseId: number | null;
+  activeCustomZoneId: number | null;
+  customZoneAllFloors: boolean;
+  customZoneMode: CustomZoneMode;
   pickingPosition: boolean;
   setPickingPosition: (picking: boolean) => void;
   pinPosition: Position | null;
@@ -146,6 +151,9 @@ export interface ToolContextValue {
   setBrushShape: (shape: BrushShape) => void;
   setDoodadThickness: (percent: number | null) => void;
   setActiveHouse: (id: number | null) => void;
+  setActiveCustomZone: (id: number | null) => void;
+  setCustomZoneAllFloors: (allFloors: boolean) => void;
+  setCustomZoneMode: (mode: CustomZoneMode) => void;
   setEraserMode: (mode: EraserMode) => void;
   revealInPalette: (category: PaletteCategoryId, serverId: number, name?: string) => void;
   setPaletteCategory: (category: PaletteCategoryId) => void;

@@ -85,7 +85,13 @@ export interface MapScene {
   refImageBoxRef: React.RefObject<HTMLDivElement>;
   refImageElRef: React.RefObject<HTMLImageElement>;
   refImageFrameRef: React.RefObject<HTMLDivElement>;
+  customZonePolygon: React.MutableRefObject<CustomZonePolygon | null>;
   refImage: React.MutableRefObject<ReferenceLive | null>;
+}
+
+export interface CustomZonePolygon {
+  z: number;
+  points: { x: number; y: number }[];
 }
 
 export interface ReferenceLive {
@@ -141,6 +147,7 @@ export function useMapScene(): MapScene {
     refImageBoxRef: React.useRef<HTMLDivElement>(null),
     refImageElRef: React.useRef<HTMLImageElement>(null),
     refImageFrameRef: React.useRef<HTMLDivElement>(null),
-    refImage: React.useRef<ReferenceLive | null>(null)
+    refImage: React.useRef<ReferenceLive | null>(null),
+    customZonePolygon: React.useRef<CustomZonePolygon | null>(null)
   };
 }

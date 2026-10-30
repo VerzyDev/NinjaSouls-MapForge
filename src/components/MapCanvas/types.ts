@@ -9,9 +9,10 @@ import { SelectionMode } from '~/usecase/floors';
 import { TooltipTypes } from '~/domain/tooltips';
 import { MapWaypoints } from '~/domain/waypoint';
 import { ToolId, EraserMode } from '~/domain/tools';
+import { MapCustomZones } from '~/domain/customZone';
 import { MapView, MapMeta, Position } from '~/domain/map';
 import { ActiveBrush, ItemBrushKind, PaletteCategoryId } from '~/domain/palette';
-import { HuntArea, HuntMeta, HuntMonster, HuntViewPreview } from '~/usecase/context/ToolContext/types';
+import { HuntArea, HuntMeta, HuntMonster, HuntViewPreview, CustomZoneMode } from '~/usecase/context/ToolContext/types';
 
 export interface Camera {
   x: number;
@@ -119,6 +120,8 @@ export interface MapCanvasProps {
   houses: MapHouses | null;
   onEditHouses: (next: MapHouses) => void;
   onHousesDirty: () => void;
+  customZones: MapCustomZones | null;
+  onEditCustomZones: (next: MapCustomZones) => void;
   placingWaypoint: string | null;
   onPlaceWaypoint: () => void;
   floorZ: number;
@@ -181,12 +184,16 @@ export interface MapCanvasContextInputs {
   brushShape: BrushShape;
   onBrushSize: (size: number) => void;
   activeHouseId: number | null;
+  activeCustomZoneId: number | null;
+  customZoneAllFloors: boolean;
+  customZoneMode: CustomZoneMode;
   pickingPosition: boolean;
   pinPosition: Position | null;
   onToolChange: (tool: ToolId) => void;
   onSelectBrush: (brush: ActiveBrush | null) => void;
   onRevealBrush?: (category: PaletteCategoryId, serverId: number, name?: string) => void;
   onSelectHouse: (houseId: number) => void;
+  onSelectCustomZone: (zoneId: number) => void;
   huntAreaSelecting: boolean;
   huntEditing: boolean;
   huntView: HuntViewPreview;

@@ -116,6 +116,9 @@ const MapCanvas = (props: MapCanvasProps) => {
     brushShape: tool.brushShape,
     onBrushSize: tool.setBrushSize,
     activeHouseId: tool.activeHouseId,
+    activeCustomZoneId: tool.activeCustomZoneId,
+    customZoneAllFloors: tool.customZoneAllFloors,
+    customZoneMode: tool.customZoneMode,
     pickingPosition: tool.pickingPosition,
     pinPosition: tool.pinPosition,
     huntAreaSelecting: tool.huntAreaSelecting,
@@ -132,6 +135,10 @@ const MapCanvas = (props: MapCanvasProps) => {
       tool.setActiveHouse(id);
       tool.setActiveTool('house');
       tool.revealInPalette('houses', id);
+    },
+    onSelectCustomZone: (id: number) => {
+      tool.setActiveCustomZone(id);
+      tool.setPaletteCategory('zones');
     }
   };
 
@@ -325,7 +332,8 @@ const MapCanvas = (props: MapCanvasProps) => {
 
   const paintable =
     (activeTool === 'brush' && activeBrush != null && activeBrush.serverId != null) ||
-    (activeTool === 'house' && tool.activeHouseId != null);
+    (activeTool === 'house' && tool.activeHouseId != null) ||
+    (activeTool === 'custom_zone' && tool.activeCustomZoneId != null);
   const canvasCursor =
     interaction.spaceHeld || camera.panning
       ? camera.panning

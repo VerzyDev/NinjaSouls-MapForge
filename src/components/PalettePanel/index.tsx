@@ -6,6 +6,7 @@ import { cn } from '~/usecase/classNames';
 import { LoadedSprite } from '~/domain/sprite';
 import { loadSprites } from '~/adapter/sprites';
 import { House, MapHouses } from '~/domain/house';
+import { MapCustomZones } from '~/domain/customZone';
 import { Hint } from '~/components/commons/ui/tooltip';
 import { useTool } from '~/usecase/context/ToolContext';
 import { TILE } from '~/components/MapCanvas/constants';
@@ -19,6 +20,7 @@ import { brushSpriteLayout, BrushSpriteLayout, resolveBrushThing } from '~/useca
 import { Select, SelectItem, SelectValue, SelectContent, SelectTrigger } from '~/components/commons/ui/select';
 import { PaletteData, PaletteBrush, emptyPalette, PaletteTileset, PaletteCategoryId, PALETTE_CATEGORIES } from '~/domain/palette';
 
+import ZonesList from './ZonesList';
 import HousesList from './HousesList';
 import GeneratorView from './GeneratorView';
 import PaletteSearch from './PaletteSearch';
@@ -46,6 +48,8 @@ interface PalettePanelProps {
   onCopyWaypointPosition: (wp: Waypoint) => void;
   onEditHouses: (next: MapHouses) => void;
   onGotoHouse: (house: House) => void;
+  customZones: MapCustomZones | null;
+  onEditCustomZones: (next: MapCustomZones) => void;
   creatureTilesets?: PaletteTileset[];
   creatureNeedsPicker?: boolean;
   onPickCreatureDir?: () => void;
@@ -79,6 +83,8 @@ const PalettePanel = ({
   onCopyWaypointPosition,
   onEditHouses,
   onGotoHouse,
+  customZones,
+  onEditCustomZones,
   creatureTilesets,
   creatureNeedsPicker,
   onPickCreatureDir
@@ -335,8 +341,9 @@ const PalettePanel = ({
   const isWaypoints = category === 'waypoints';
   const isHouses = category === 'houses';
   const isCreature = category === 'creature';
+  const isZones = category === 'zones';
   const isGenerator = category === 'generator';
-  const isList = isWaypoints || isHouses || isGenerator;
+  const isList = isWaypoints || isHouses || isZones || isGenerator;
 
   React.useEffect(() => {
     setQuery('');
@@ -366,7 +373,13 @@ const PalettePanel = ({
           </Hint>
         )}
         <span className="ml-auto font-mono text-[10px] text-muted-foreground">
-          {isWaypoints ? (waypoints?.list.length ?? 0) : isHouses ? (houses?.list.length ?? 0) : tiles.length}
+          {isWaypoints
+            ? (waypoints?.list.length ?? 0)
+            : isHouses
+              ? (houses?.list.length ?? 0)
+              : isZones
+                ? (customZones?.list.length ?? 0)
+                : tiles.length}
         </span>
         {onClose && (
           <Hint side="bottom" label="Close palette">
@@ -427,6 +440,8 @@ const PalettePanel = ({
         />
       ) : isHouses ? (
         <HousesList towns={towns} houses={houses} onGoto={onGotoHouse} onEdit={onEditHouses} />
+      ) : isZones ? (
+        <ZonesList zones={customZones} onEdit={onEditCustomZones} />
       ) : isGenerator ? (
         <GeneratorView creatureTilesets={creatureTilesets} />
       ) : (

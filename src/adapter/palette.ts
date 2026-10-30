@@ -335,6 +335,7 @@ export async function loadPalette(dir = defaultDataDir(), items?: Map<number, Th
     creature: [],
     waypoints: [],
     houses: [],
+    zones: [],
     generator: []
   };
   const claimed = new Set<number>();

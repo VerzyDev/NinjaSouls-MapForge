@@ -22,6 +22,7 @@ import {
   IconSpider,
   IconSwords,
   IconLogout,
+  IconMapPin,
   IconDoorExit,
   IconSwordOff,
   IconMessage2,
@@ -59,7 +60,8 @@ const ICONS: Record<ToolId, ComponentType<{ className?: string }>> = {
   zone_nologout: IconLogout,
   zone_pvp: IconSwords,
   house: IconHome,
-  house_exit: IconDoorExit
+  house_exit: IconDoorExit,
+  custom_zone: IconMapPin
 };
 
 const BRUSH_SHAPES: { id: BrushShape; label: string; Icon: ComponentType<{ className?: string }> }[] = [
@@ -302,9 +304,10 @@ interface ToolsPanelProps {
 }
 
 const ToolsPanel = ({ dragHandle }: ToolsPanelProps) => {
-  const { activeTool, setActiveTool, ctrlErase, eraserMode, setEraserMode } = useTool();
+  const { activeTool, setActiveTool, ctrlErase, eraserMode, setEraserMode, setPaletteCategory } = useTool();
 
-  const erasing = ctrlErase && (activeTool === 'brush' || isHouseTool(activeTool) || isZoneTool(activeTool));
+  const erasing =
+    ctrlErase && (activeTool === 'brush' || activeTool === 'custom_zone' || isHouseTool(activeTool) || isZoneTool(activeTool));
   const isSelected = (id: ToolId) => {
     if (erasing) return id === 'eraser';
     if (id === 'brush') return activeTool === 'brush' || isHouseTool(activeTool);
@@ -362,7 +365,10 @@ const ToolsPanel = ({ dragHandle }: ToolsPanelProps) => {
             {tool.id === 'zone_pz' && <div className="my-1 h-px w-5 bg-border/60" />}
             <Hint side="right" label={tool.keybind ? withKeybind(tool.label, keybinds, tool.keybind) : tool.label}>
               <button
-                onClick={() => setActiveTool(tool.id)}
+                onClick={() => {
+                  setActiveTool(tool.id);
+                  if (tool.id === 'custom_zone') setPaletteCategory('zones');
+                }}
                 className={cn(
                   'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded transition-colors',
                   selected ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-item-hover hover:text-foreground'

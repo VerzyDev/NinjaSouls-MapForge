@@ -36,7 +36,7 @@ use creatures::{
 	CreatureWatcherState,
 };
 use map_edit::{
-	borderize_brush, copy_selection, delete_item, delete_selection, erase_area, erase_brush, erase_duplicates, flood_region, generate_apply, ground_mask, house_sizes, move_item, move_selection,
+	borderize_brush, copy_selection, delete_item, delete_selection, erase_area, erase_brush, erase_duplicates, flood_region, flood_walkable, generate_apply, ground_mask, house_sizes, move_item, move_selection,
 	paint_tiles, paint_zone, paste_selection,
 	count_items, distinct_items, preview_paint, remove_item_at, remove_items_with_client_ids, replace_items, set_doodad_thickness, set_door_locked, set_house, switch_door,
 	CopyBuffer,
@@ -199,6 +199,7 @@ pub fn run() {
 			set_door_locked,
 			switch_door,
 			flood_region,
+			flood_walkable,
 			ground_mask,
 			generate_apply,
 			paint_zone,

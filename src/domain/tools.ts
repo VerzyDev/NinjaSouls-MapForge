@@ -3,7 +3,18 @@ import { KeybindId } from '~/domain/keybinds';
 
 export type HouseToolId = 'house' | 'house_exit';
 
-export type ToolId = 'select' | 'brush' | 'pen' | 'eraser' | 'borderize' | 'bucket' | 'wand' | 'spawn' | ZoneToolId | HouseToolId;
+export type ToolId =
+  | 'select'
+  | 'brush'
+  | 'pen'
+  | 'eraser'
+  | 'borderize'
+  | 'bucket'
+  | 'wand'
+  | 'spawn'
+  | 'custom_zone'
+  | ZoneToolId
+  | HouseToolId;
 
 export interface ToolMeta {
   id: ToolId;
@@ -32,7 +43,8 @@ export const TOOLS: ToolMeta[] = [
   { id: 'zone_pz', label: 'Protection zone (Ctrl-drag to erase)' },
   { id: 'zone_nopvp', label: 'No-PVP zone (Ctrl-drag to erase)' },
   { id: 'zone_nologout', label: 'No-logout zone (Ctrl-drag to erase)' },
-  { id: 'zone_pvp', label: 'PVP zone (Ctrl-drag to erase)' }
+  { id: 'zone_pvp', label: 'PVP zone (Ctrl-drag to erase)' },
+  { id: 'custom_zone', label: 'Custom zone - pick or add one in the Zone Palette, Alt-click a tile to select its zone (Ctrl-drag to erase)' }
 ];
 
 export type EraserMode = 'items' | 'ground' | 'creatures' | 'duplicates';

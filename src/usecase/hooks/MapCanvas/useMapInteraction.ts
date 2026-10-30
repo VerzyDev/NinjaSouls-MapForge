@@ -33,6 +33,18 @@ import { coverageMask, spreadPoints, scatterPoints, nearestWalkable } from '~/li
 import { waypointAt, MapWaypoints, emptyMapWaypoints, buildMapWaypoints } from '~/domain/waypoint';
 import { addWaypoint, moveWaypoint, removeWaypoint, renameWaypoint, nextWaypointName } from '~/usecase/waypointEdits';
 import {
+  MapCustomZones,
+  CustomZoneFile,
+  paintCustomZone,
+  toCustomZoneFile,
+  customZoneIdsAt,
+  polygonTiles,
+  fromCustomZoneFile,
+  customZoneTilesOnFloor,
+  connectedCustomZoneTiles,
+  emptyMapCustomZones
+} from '~/domain/customZone';
+import {
   moveSpawn,
   placeSpawn,
   updateSpawn,
@@ -68,6 +80,7 @@ import {
   paintTiles,
   PaintResult,
   floodRegion,
+  floodWalkable,
   PaintOptions,
   EraseOptions,
   previewPaint,
@@ -97,6 +110,7 @@ interface Sidecar {
   spawns?: MapSpawns;
   waypoints?: MapWaypoints;
   houses?: MapHouses;
+  customZones?: CustomZoneFile;
   pen?: PenAnchor[];
 }
 
@@ -188,6 +202,7 @@ export function useMapInteraction(deps: InteractionDeps) {
     if (sc.spawns) inputs.current.onEditSpawns(buildMapSpawns(sc.spawns.areas ?? [], sc.spawns.placements ?? []));
     if (sc.waypoints) inputs.current.onEditWaypoints(buildMapWaypoints(sc.waypoints.list ?? []));
     if (sc.houses) inputs.current.onEditHouses(sc.houses);
+    if (sc.customZones) inputs.current.onEditCustomZones(fromCustomZoneFile(sc.customZones));
     if (sc.sel) selection.restore(sc.sel);
     if (sc.pen !== undefined) {
       penDrag.current = null;
@@ -969,6 +984,165 @@ export function useMapInteraction(deps: InteractionDeps) {
       .catch((err) => console.error('Failed to paint house box', err));
   }
 
+  const customZoneStroke = React.useRef<{
+    id: number;
+    set: boolean;
+    before: MapCustomZones;
+    latest: MapCustomZones;
+  } | null>(null);
+
+  function pushCustomZoneUndo(before: MapCustomZones, after: MapCustomZones) {
+    void pushUndoSidecar(
+      inputs.current.map.id,
+      JSON.stringify({ customZones: toCustomZoneFile(before) } satisfies Sidecar),
+      JSON.stringify({ customZones: toCustomZoneFile(after) } satisfies Sidecar)
+    );
+  }
+
+  function beginCustomZoneStroke(pos: Position, set: boolean): boolean {
+    const id = inputs.current.activeCustomZoneId;
+    if (id == null) {
+      emit('Select a zone first');
+      return false;
+    }
+    const base = inputs.current.customZones ?? emptyMapCustomZones();
+    customZoneStroke.current = { id, set, before: base, latest: base };
+    scene.lastPaintKey.current = null;
+    customZonePaintAt(pos);
+    return true;
+  }
+
+  function customZonePaintAt(pos: Position) {
+    const stroke = customZoneStroke.current;
+    if (!stroke || !beginStroke(pos)) return;
+    const { xs, ys } = strokeFootprint(pos);
+    const next = paintCustomZone(stroke.latest, pos.z, xs, ys, stroke.id, stroke.set, inputs.current.customZoneAllFloors);
+    if (!next) return;
+    stroke.latest = next;
+    inputs.current.onEditCustomZones(next);
+  }
+
+  function finishCustomZoneStroke() {
+    const stroke = customZoneStroke.current;
+    customZoneStroke.current = null;
+    if (stroke && stroke.latest !== stroke.before) pushCustomZoneUndo(stroke.before, stroke.latest);
+  }
+
+  function pickCustomZoneAt(pos: Position) {
+    const ids = customZoneIdsAt(inputs.current.customZones, pos.x, pos.y, pos.z);
+    if (!ids.length) {
+      emit('No custom zone on this tile');
+      return;
+    }
+    const current = inputs.current.activeCustomZoneId;
+    const index = current == null ? -1 : ids.indexOf(current);
+    const next = ids[(index + 1) % ids.length];
+    inputs.current.onSelectCustomZone(next);
+    emit(`Zone ${next} selected`);
+  }
+
+  function customZonePaintBox(bs: BoxSelection, set: boolean) {
+    const id = inputs.current.activeCustomZoneId;
+    if (id == null) {
+      emit('Select a zone first');
+      return;
+    }
+    const before = inputs.current.customZones ?? emptyMapCustomZones();
+    const { xs, ys } = boxTiles(bs);
+    const next = paintCustomZone(before, bs.startTile.z, xs, ys, id, set, inputs.current.customZoneAllFloors);
+    if (!next) return;
+    inputs.current.onEditCustomZones(next);
+    pushCustomZoneUndo(before, next);
+  }
+
+  function applyCustomZoneTiles(id: number, z: number, xs: number[], ys: number[], set: boolean) {
+    const before = inputs.current.customZones ?? emptyMapCustomZones();
+    const next = paintCustomZone(before, z, xs, ys, id, set, inputs.current.customZoneAllFloors);
+    if (!next) {
+      emit('Nothing changed');
+      return;
+    }
+    inputs.current.onEditCustomZones(next);
+    pushCustomZoneUndo(before, next);
+    emit(`${set ? 'Filled' : 'Erased'} ${xs.length} tiles`);
+  }
+
+  async function customZoneFill(pos: Position, set: boolean) {
+    const id = inputs.current.activeCustomZoneId;
+    if (id == null) {
+      emit('Select a zone first');
+      return;
+    }
+    const zones = inputs.current.customZones ?? emptyMapCustomZones();
+    if (!set) {
+      const { xs, ys } = connectedCustomZoneTiles(zones, id, pos.z, pos.x, pos.y);
+      if (!xs.length) {
+        emit('This zone is not on this tile');
+        return;
+      }
+      applyCustomZoneTiles(id, pos.z, xs, ys, false);
+      return;
+    }
+    const own = customZoneTilesOnFloor(zones, id, pos.z);
+    const stop = own.xs.map((x, i) => (x << 16) | own.ys[i]);
+    emit('Filling...');
+    let cells: Position[];
+    try {
+      cells = await floodWalkable(inputs.current.map.id, pos.z, pos.x, pos.y, stop);
+    } catch (err) {
+      emit(`Fill stopped (${String(err)}): the area leaks, close the gap with the brush or use the polygon`);
+      return;
+    }
+    if (!cells.length) {
+      emit('Click a walkable tile that is not in this zone yet');
+      return;
+    }
+    applyCustomZoneTiles(
+      id,
+      pos.z,
+      cells.map((c) => c.x),
+      cells.map((c) => c.y),
+      true
+    );
+  }
+
+  function customZonePolygonClick(pos: Position, ctrl: boolean) {
+    const polygon = scene.customZonePolygon.current;
+    if (!polygon || polygon.z !== pos.z) {
+      scene.customZonePolygon.current = { z: pos.z, points: [{ x: pos.x, y: pos.y }] };
+      emit('Click to add corners. Click the first corner or press Enter to fill, Ctrl to erase, Backspace to undo, Esc to cancel');
+      return;
+    }
+    const first = polygon.points[0];
+    if (polygon.points.length >= 3 && first.x === pos.x && first.y === pos.y) {
+      finishCustomZonePolygon(!ctrl);
+      return;
+    }
+    const last = polygon.points[polygon.points.length - 1];
+    if (last.x !== pos.x || last.y !== pos.y) polygon.points.push({ x: pos.x, y: pos.y });
+  }
+
+  function finishCustomZonePolygon(set: boolean) {
+    const polygon = scene.customZonePolygon.current;
+    if (!polygon) return;
+    if (polygon.points.length < 3) {
+      emit('The polygon needs at least 3 corners');
+      return;
+    }
+    const id = inputs.current.activeCustomZoneId;
+    if (id == null) {
+      emit('Select a zone first');
+      return;
+    }
+    const tiles = polygonTiles(polygon.points);
+    if (!tiles) {
+      emit('The polygon is too big, split it in smaller parts');
+      return;
+    }
+    scene.customZonePolygon.current = null;
+    applyCustomZoneTiles(id, polygon.z, tiles.xs, tiles.ys, set);
+  }
+
   function setHouseExit(pos: Position) {
     const houseId = inputs.current.activeHouseId;
     const houses = inputs.current.houses;
@@ -1283,6 +1457,7 @@ export function useMapInteraction(deps: InteractionDeps) {
     replaceAnchor.current = null;
     zonePainting.current = false;
     housePainting.current = false;
+    finishCustomZoneStroke();
     borderizing.current = false;
     scene.lastPaintKey.current = null;
   }
@@ -1296,6 +1471,7 @@ export function useMapInteraction(deps: InteractionDeps) {
       scene.erasing.current ||
       zonePainting.current ||
       housePainting.current ||
+      !!customZoneStroke.current ||
       borderizing.current ||
       !!creatureStroke.current ||
       !!markerEraseStroke.current;
@@ -2140,7 +2316,13 @@ export function useMapInteraction(deps: InteractionDeps) {
     const zoneTool = isZoneTool(tool);
     if (
       e.shiftKey &&
-      (tool === 'select' || tool === 'eraser' || tool === 'borderize' || zoneTool || canBrush || tool === 'house')
+      (tool === 'select' ||
+        tool === 'eraser' ||
+        tool === 'borderize' ||
+        zoneTool ||
+        canBrush ||
+        tool === 'house' ||
+        tool === 'custom_zone')
     ) {
       const pos = tileAt(e);
       selection.box.current = { startTile: pos, curTile: pos, additive: e.ctrlKey };
@@ -2230,6 +2412,15 @@ export function useMapInteraction(deps: InteractionDeps) {
       if (!onSel && !hoverAt(pos).hasTile) {
         selection.clear();
         inputs.current.onSelect(null);
+    if (tool === 'custom_zone') {
+      const mode = inputs.current.customZoneMode;
+      if (mode !== 'polygon') scene.customZonePolygon.current = null;
+      if (e.altKey) pickCustomZoneAt(tileAt(e));
+      else if (mode === 'fill') void customZoneFill(tileAt(e), !e.ctrlKey);
+      else if (mode === 'polygon') customZonePolygonClick(tileAt(e), e.ctrlKey);
+      else beginCustomZoneStroke(tileAt(e), !e.ctrlKey);
+      return;
+    }
         return;
       }
       if (!onSel) selection.selectTile(pos, false);
@@ -2329,6 +2520,8 @@ export function useMapInteraction(deps: InteractionDeps) {
       return;
     }
     if (scene.huntAreaDrag.current) {
+    } else if (customZoneStroke.current) {
+      customZonePaintAt(tileAt(e));
       const d = scene.huntAreaDrag.current;
       scene.huntAreaDrag.current = null;
       const area = {
@@ -2385,7 +2578,7 @@ export function useMapInteraction(deps: InteractionDeps) {
     resetStrokes();
   }
 
-  function onDoubleClick() {
+  function onDoubleClick(e: React.MouseEvent) {
     if (inputs.current.activeTool === 'pen') penFinish();
   }
 
@@ -2408,6 +2601,8 @@ export function useMapInteraction(deps: InteractionDeps) {
 
   function goTo(pos: Position) {
     camera.centerOn(pos);
+      } else if (tool === 'custom_zone') {
+        customZonePaintBox(bs, !bs.additive);
     inputs.current.onFloorChange(pos.z);
     setMenu(null);
     setGotoForm(null);
@@ -2433,6 +2628,7 @@ export function useMapInteraction(deps: InteractionDeps) {
     if (inputs.current.activeTool === 'pen') {
       penCancel();
       return;
+    if (inputs.current.activeTool === 'custom_zone' && scene.customZonePolygon.current) finishCustomZonePolygon(!e.ctrlKey);
     }
     enterSelectionMode();
     const tile = tileAt(e);
@@ -2659,6 +2855,26 @@ export function useMapInteraction(deps: InteractionDeps) {
       else if (id === 'edit.cut') cutSelected();
       else if (clipboardCount.current === 0) emit('Clipboard empty');
       else {
+      if (inputs.current.activeTool === 'custom_zone' && scene.customZonePolygon.current) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finishCustomZonePolygon(!e.ctrlKey);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          scene.customZonePolygon.current = null;
+          emit('Polygon cancelled');
+          return;
+        }
+        if (e.key === 'Backspace') {
+          e.preventDefault();
+          const points = scene.customZonePolygon.current.points;
+          points.pop();
+          if (!points.length) scene.customZonePolygon.current = null;
+          return;
+        }
+      }
         scene.pasteGhost.current = clipboardGhostSource.current ?? [];
         emit('Click to paste, Esc to cancel');
       }

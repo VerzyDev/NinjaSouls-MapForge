@@ -951,6 +951,132 @@ pub fn flood_region(
 	Ok(Response::new(out))
 }
 
+const WALKABLE_FLOOD_LIMIT: usize = 2_000_000;
+
+fn is_walkable(m: &MapModel, mats: Option<&Materials>, place: &HashMap<u16, PlaceFlags>, z: u8, x: u16, y: u16) -> bool {
+	let stack = stack_at(m, z, x, y);
+	let Some(&(client, server)) = stack.first() else {
+		return false;
+	};
+	if !is_ground_item(place, mats, client, server) {
+		return false;
+	}
+	!stack.iter().any(|(c, _)| place.get(c).is_some_and(|p| p.blocking))
+}
+
+fn fill_holes(region: &HashSet<u32>) -> Vec<(u16, u16)> {
+	let (mut min_x, mut min_y, mut max_x, mut max_y) = (u16::MAX, u16::MAX, 0u16, 0u16);
+	for &key in region {
+		let (x, y) = ((key >> 16) as u16, (key & 0xFFFF) as u16);
+		min_x = min_x.min(x);
+		min_y = min_y.min(y);
+		max_x = max_x.max(x);
+		max_y = max_y.max(y);
+	}
+	let (ox, oy) = (min_x as i64 - 1, min_y as i64 - 1);
+	let w = (max_x as i64 - ox + 2) as usize;
+	let h = (max_y as i64 - oy + 2) as usize;
+	let index = |x: i64, y: i64| (y - oy) as usize * w + (x - ox) as usize;
+
+	let mut inside = vec![false; w * h];
+	for &key in region {
+		inside[index((key >> 16) as i64, (key & 0xFFFF) as i64)] = true;
+	}
+	let mut outside = vec![false; w * h];
+	let mut queue: Vec<(i64, i64)> = vec![(ox, oy)];
+	outside[0] = true;
+	while let Some((cx, cy)) = queue.pop() {
+		for (dx, dy) in [(0i64, -1i64), (-1, 0), (1, 0), (0, 1)] {
+			let (nx, ny) = (cx + dx, cy + dy);
+			if nx < ox || ny < oy || nx >= ox + w as i64 || ny >= oy + h as i64 {
+				continue;
+			}
+			let i = index(nx, ny);
+			if inside[i] || outside[i] {
+				continue;
+			}
+			outside[i] = true;
+			queue.push((nx, ny));
+		}
+	}
+
+	let mut found = Vec::new();
+	for gy in 0..h {
+		for gx in 0..w {
+			let i = gy * w + gx;
+			if !outside[i] {
+				found.push(((ox + gx as i64) as u16, (oy + gy as i64) as u16));
+			}
+		}
+	}
+	found
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn flood_walkable(
+	map_id: u32,
+	z: u8,
+	x: u16,
+	y: u16,
+	stop: Vec<u32>,
+	otb_state: tauri::State<OtbState>,
+	map_state: tauri::State<MapState>,
+	materials_state: tauri::State<MaterialsState>,
+	placement_state: tauri::State<PlacementState>,
+) -> Result<Response, String> {
+	let otb_guard = otb_state.read().map_err(|e| format!("Lock error: {}", e))?;
+	let empty = OtbItems::default();
+	let otb = otb_guard.as_ref().unwrap_or(&empty);
+	let materials_guard = materials_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+	let mats = materials_guard.as_ref();
+	let place = placement_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+
+	let mut guard = map_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+	let m = guard.maps.get_mut(&map_id).ok_or("map not loaded")?;
+	m.ensure_floor(z, otb)?;
+
+	let stop: HashSet<u32> = stop.into_iter().collect();
+	let start = (x as u32) << 16 | y as u32;
+	let mut out: Vec<u8> = Vec::new();
+	if stop.contains(&start) || !is_walkable(m, mats, &place, z, x, y) {
+		push_u32(&mut out, 0);
+		return Ok(Response::new(out));
+	}
+
+	let max_x = m.width.saturating_sub(1).max(m.max_x);
+	let max_y = m.height.saturating_sub(1).max(m.max_y);
+	let mut region: HashSet<u32> = HashSet::new();
+	let mut queue: Vec<(u16, u16)> = vec![(x, y)];
+	region.insert(start);
+	while let Some((cx, cy)) = queue.pop() {
+		for (dx, dy) in [(0i32, -1i32), (-1, 0), (1, 0), (0, 1)] {
+			let (nx, ny) = (cx as i32 + dx, cy as i32 + dy);
+			if nx < 0 || ny < 0 || nx > max_x as i32 || ny > max_y as i32 {
+				continue;
+			}
+			let (nx, ny) = (nx as u16, ny as u16);
+			let key = (nx as u32) << 16 | ny as u32;
+			if region.contains(&key) || stop.contains(&key) || !is_walkable(m, mats, &place, z, nx, ny) {
+				continue;
+			}
+			region.insert(key);
+			if region.len() > WALKABLE_FLOOD_LIMIT {
+				return Err(format!("area over {} tiles", WALKABLE_FLOOD_LIMIT));
+			}
+			queue.push((nx, ny));
+		}
+	}
+
+	let found = fill_holes(&region);
+	push_u32(&mut out, found.len() as u32);
+	for (fx, fy) in found {
+		push_u16(&mut out, fx);
+		push_u16(&mut out, fy);
+	}
+	Ok(Response::new(out))
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub fn paint_zone(

@@ -8,6 +8,13 @@ import { MapCanvasInputs } from '~/components/MapCanvas/types';
 import { floorShift, visibleFloorRange } from '~/usecase/floors';
 import { SpawnArea, CreaturePlacement } from '~/domain/creature';
 import { MapMeta, Position, ChunkTiles, PreviewTile } from '~/domain/map';
+import {
+  CustomZone,
+  customZoneColor,
+  customZoneTileKey,
+  customZoneIdsOnFloor,
+  customZoneRangeMasks
+} from '~/domain/customZone';
 import { packChunkKey, previewPaint, fetchMapChunks, fetchChunkTooltips } from '~/adapter/map';
 import { BrushShape, brushFootprint, footprintReach, footprintMaskSvg } from '~/lib/brushFootprint';
 import { isCountStack, isFluidThing, getSpriteIndex, stackSpriteIndex, fluidSpriteIndex } from '~/domain/tibia';
@@ -325,6 +332,125 @@ export function useMapRenderer(deps: RendererDeps) {
     };
   }
 
+  function drawCustomZones(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    zoom: number,
+    vw: number,
+    vh: number,
+    z: number
+  ) {
+    const zones = inputs.current.customZones;
+    if (inputs.current.activeTool !== 'custom_zone' || !zones || zones.tiles.size === 0) return;
+
+    const minX = Math.max(0, Math.floor(camX / TILE));
+    const minY = Math.max(0, Math.floor(camY / TILE));
+    const maxX = Math.min(65535, Math.floor((camX + vw / zoom) / TILE));
+    const maxY = Math.min(65535, Math.floor((camY + vh / zoom) / TILE));
+    const visibleCount = (maxX - minX + 1) * (maxY - minY + 1);
+
+    const tilesByZone = new Map<number, number[]>();
+    const collect = (x: number, y: number, ids: number[]) => {
+      ids.forEach((id, layer) => {
+        const list = tilesByZone.get(id);
+        if (list) list.push(x, y, layer);
+        else tilesByZone.set(id, [x, y, layer]);
+      });
+    };
+    const masks = customZoneRangeMasks(zones);
+    if (visibleCount <= zones.tiles.size) {
+      for (let y = minY; y <= maxY; y++) {
+        for (let x = minX; x <= maxX; x++) {
+          const ids = customZoneIdsOnFloor(zones.tiles.get(customZoneTileKey(x, y)), z, masks);
+          if (ids.length) collect(x, y, ids);
+        }
+      }
+    } else {
+      for (const [key, entries] of zones.tiles) {
+        const x = key % 65536;
+        const y = Math.floor(key / 65536);
+        if (x < minX || x > maxX || y < minY || y > maxY) continue;
+        const ids = customZoneIdsOnFloor(entries, z, masks);
+        if (ids.length) collect(x, y, ids);
+      }
+    }
+    if (tilesByZone.size === 0) return;
+
+    const selected = inputs.current.activeCustomZoneId;
+    const byId = new Map<number, CustomZone>(zones.list.map((zone) => [zone.id, zone]));
+    const size = TILE * zoom;
+    const tiny = size < 6;
+    const line = Math.max(1, Math.min(3, size * 0.07));
+    const order = [...tilesByZone.keys()].sort((a, b) => (a === selected ? 1 : b === selected ? -1 : a - b));
+
+    ctx.save();
+    for (const id of order) {
+      const coords = tilesByZone.get(id)!;
+      const isSelected = id === selected;
+      const width = isSelected ? line * 2 : line;
+      ctx.strokeStyle = ctx.fillStyle = customZoneColor(byId.get(id), id);
+      ctx.globalAlpha = isSelected ? 1 : selected != null ? 0.5 : 0.85;
+      if (isSelected) {
+        ctx.save();
+        ctx.globalAlpha = 0.16;
+        for (let i = 0; i < coords.length; i += 3) {
+          ctx.fillRect((coords[i] * TILE - camX) * zoom, (coords[i + 1] * TILE - camY) * zoom, size, size);
+        }
+        ctx.restore();
+      }
+      if (tiny) {
+        if (!isSelected) {
+          ctx.globalAlpha *= 0.5;
+          for (let i = 0; i < coords.length; i += 3) {
+            ctx.fillRect((coords[i] * TILE - camX) * zoom, (coords[i + 1] * TILE - camY) * zoom, size, size);
+          }
+        }
+        continue;
+      }
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      for (let i = 0; i < coords.length; i += 3) {
+        const inset = width / 2 + 1 + coords[i + 2] * (line + 1);
+        const side = size - inset * 2;
+        if (side <= 0) continue;
+        ctx.rect((coords[i] * TILE - camX) * zoom + inset, (coords[i + 1] * TILE - camY) * zoom + inset, side, side);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawCustomZonePolygon(ctx: CanvasRenderingContext2D, camX: number, camY: number, zoom: number, z: number) {
+    const polygon = scene.customZonePolygon.current;
+    if (inputs.current.activeTool !== 'custom_zone' || !polygon || polygon.z !== z || !polygon.points.length) return;
+    const id = inputs.current.activeCustomZoneId;
+    const zone = id != null ? inputs.current.customZones?.list.find((item) => item.id === id) : undefined;
+    const center = (value: number, cam: number) => ((value + 0.5) * TILE - cam) * zoom;
+    const hover = scene.hoveredTile.current;
+    const points = hover && hover.z === z ? [...polygon.points, { x: hover.x, y: hover.y }] : polygon.points;
+
+    ctx.save();
+    ctx.strokeStyle = ctx.fillStyle = customZoneColor(zone, id ?? 0);
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.18;
+    ctx.beginPath();
+    points.forEach((p, i) => (i ? ctx.lineTo : ctx.moveTo).call(ctx, center(p.x, camX), center(p.y, camY)));
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 0.95;
+    ctx.setLineDash([6, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const radius = Math.max(3, Math.min(6, TILE * zoom * 0.2));
+    polygon.points.forEach((p, i) => {
+      ctx.beginPath();
+      ctx.arc(center(p.x, camX), center(p.y, camY), i === 0 ? radius * 1.5 : radius, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.restore();
+  }
+
   function drawHuntPreview(camX: number, camY: number, zoom: number, vw: number, vh: number) {
     const canvas = scene.huntCanvasRef.current;
     if (!canvas) return;
@@ -341,6 +467,9 @@ export function useMapRenderer(deps: RendererDeps) {
     ctx.clearRect(0, 0, vw, vh);
 
     const floorZ = inputs.current.floorZ;
+
+    drawCustomZones(ctx, camX, camY, zoom, vw, vh, floorZ);
+    drawCustomZonePolygon(ctx, camX, camY, zoom, floorZ);
 
     const imp = scene.importGhost.current;
     const hoverImp = scene.hoveredTile.current;
@@ -736,7 +865,7 @@ export function useMapRenderer(deps: RendererDeps) {
 
     const showBrush = tool === 'brush' && brush != null && brush.serverId != null && !ctrlErase;
     const showEraser = tool === 'eraser' || (tool === 'brush' && brush != null && brush.serverId != null && ctrlErase);
-    const showZone = isZoneTool(tool);
+    const showZone = isZoneTool(tool) || (tool === 'custom_zone' && inputs.current.activeCustomZoneId != null);
     const showHouse = tool === 'house' && inputs.current.activeHouseId != null;
     const showBorderize = tool === 'borderize';
     const showFlood = tool === 'bucket' || tool === 'wand';
@@ -941,7 +1070,8 @@ export function useMapRenderer(deps: RendererDeps) {
     const tool = inputs.current.activeTool;
     const brush = inputs.current.activeBrush;
     const paints = tool === 'brush' && brush != null && brush.serverId != null;
-    const removes = bs.additive && (paints || tool === 'borderize' || tool === 'house' || isZoneTool(tool));
+    const removes =
+      bs.additive && (paints || tool === 'borderize' || tool === 'house' || tool === 'custom_zone' || isZoneTool(tool));
     const boxStyle: OutlineStyle | null = removes || tool === 'eraser' ? 'remove' : tool === 'borderize' ? 'add' : null;
 
     if (el) {
