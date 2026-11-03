@@ -112,6 +112,7 @@ const PalettePanel = ({
   const restoredRef = React.useRef(false);
   const [tilesetName, setTilesetName] = React.useState<string>('');
   const [selectedKey, setSelectedKey] = React.useState<string | null>(null);
+  const [scrollKey, setScrollKey] = React.useState<string | null>(null);
   const [tiles, setTiles] = React.useState<Tile[]>([]);
   const [query, setQuery] = React.useState('');
   const [renderVersion, setRenderVersion] = React.useState(0);
@@ -200,11 +201,18 @@ const PalettePanel = ({
     const pend = pending.current;
     if (!pend || current?.name !== pend.tilesetName) return;
     pending.current = null;
-    const idx = sourceBrushes.findIndex((b) => b.key === pend.key);
-    if (idx < 0) return;
+    if (!sourceBrushes.some((b) => b.key === pend.key)) return;
     setSelectedKey(pend.key);
-    requestAnimationFrame(() => grid.scrollToIndex(idx));
+    setScrollKey(pend.key);
   }, [sourceBrushes, current, reveal?.nonce]);
+
+  React.useLayoutEffect(() => {
+    if (!scrollKey) return;
+    const idx = tiles.findIndex((t) => t.brush.key === scrollKey);
+    if (idx < 0) return;
+    grid.scrollToIndex(idx);
+    setScrollKey(null);
+  }, [scrollKey, tiles, grid.scrollToIndex]);
 
   React.useEffect(() => {
     let cancelled = false;

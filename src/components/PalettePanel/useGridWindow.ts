@@ -21,13 +21,20 @@ export function useGridWindow(scrollRef: React.RefObject<HTMLElement>, total: nu
   const { minCell, gap, pad, overscan = 2 } = opts;
   const [w, setW] = React.useState({ cols: 1, rowH: minCell + gap, startRow: 0, visRows: 0 });
 
+  const measure = React.useCallback(
+    (el: HTMLElement) => {
+      const inner = Math.max(0, el.clientWidth - pad * 2);
+      const cols = Math.max(1, Math.floor((inner + gap) / (minCell + gap)));
+      const cellW = (inner - (cols - 1) * gap) / cols;
+      return { cols, rowH: cellW + gap };
+    },
+    [minCell, gap, pad]
+  );
+
   const recompute = React.useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const inner = Math.max(0, el.clientWidth - pad * 2);
-    const cols = Math.max(1, Math.floor((inner + gap) / (minCell + gap)));
-    const cellW = (inner - (cols - 1) * gap) / cols;
-    const rowH = cellW + gap;
+    const { cols, rowH } = measure(el);
     const startRow = Math.max(0, Math.floor(el.scrollTop / rowH) - overscan);
     const visRows = Math.ceil(el.clientHeight / rowH) + overscan * 2;
     setW((p) =>
@@ -35,7 +42,7 @@ export function useGridWindow(scrollRef: React.RefObject<HTMLElement>, total: nu
         ? p
         : { cols, rowH, startRow, visRows }
     );
-  }, [scrollRef, total, minCell, gap, pad, overscan]);
+  }, [scrollRef, total, measure, overscan]);
 
   React.useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -58,9 +65,10 @@ export function useGridWindow(scrollRef: React.RefObject<HTMLElement>, total: nu
     (i: number) => {
       const el = scrollRef.current;
       if (!el || i < 0) return;
-      el.scrollTop = Math.floor(i / w.cols) * w.rowH;
+      const { cols, rowH } = measure(el);
+      el.scrollTop = Math.floor(i / cols) * rowH;
     },
-    [scrollRef, w.cols, w.rowH]
+    [scrollRef, measure]
   );
 
   return { cols: w.cols, rowH: w.rowH, startRow: w.startRow, start, end, totalH: rows * w.rowH, scrollToIndex };
