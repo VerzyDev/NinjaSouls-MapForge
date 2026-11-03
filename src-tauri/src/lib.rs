@@ -23,6 +23,7 @@ mod map_model;
 mod map_save;
 mod minimap_export;
 mod project;
+mod safe_fs;
 mod scripting;
 
 use formats::tibia::client_version::peek_otbm_version;

@@ -1543,7 +1543,7 @@ pub fn write_dat_file(
     append_category(&mut out, &effects_bytes, effects_min_id, effects_max_id);
     append_category(&mut out, &missiles_bytes, missiles_min_id, missiles_max_id);
 
-    std::fs::write(path, &out).map_err(|e| format!("Failed to write file: {}", e))?;
+    crate::safe_fs::write_atomic(path, &out).map_err(|e| format!("Failed to write file: {}", e))?;
 
     Ok(())
 }

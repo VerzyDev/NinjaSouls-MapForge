@@ -423,7 +423,7 @@ fn register_fs(lua: &Lua, forge: &Table) -> mlua::Result<()> {
 				std::fs::create_dir_all(parent)
 					.map_err(|e| mlua::Error::runtime(format!("forge.fs.write {rel}: {e}")))?;
 			}
-			std::fs::write(&path, data.as_bytes())
+			crate::safe_fs::write_atomic(&path, data.as_bytes())
 				.map_err(|e| mlua::Error::runtime(format!("forge.fs.write {rel}: {e}")))
 		})?,
 	)?;

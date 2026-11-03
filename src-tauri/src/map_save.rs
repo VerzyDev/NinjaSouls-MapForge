@@ -1059,9 +1059,9 @@ pub async fn save_otbm(
 		let (out, mut idx) = build_otbm_bytes(model, source.as_deref(), &ctx, &mut report)?;
 		idx.source_size = out.len() as u64;
 		emit(0.92, "Writing file...");
-		fs::write(&path, &out).map_err(|e| format!("Failed to write {}: {}", path, e))?;
+		crate::safe_fs::write_atomic(&path, &out).map_err(|e| format!("Failed to write {}: {}", path, e))?;
 		let sidecar = std::path::Path::new(&path).with_extension("otmi").to_string_lossy().to_string();
-		fs::write(&sidecar, &idx.encode()).map_err(|e| format!("Failed to write {}: {}", sidecar, e))?;
+		crate::safe_fs::write_atomic(&sidecar, idx.encode()).map_err(|e| format!("Failed to write {}: {}", sidecar, e))?;
 
 		emit(0.97, "Indexing...");
 		model.chunk_ranges = idx

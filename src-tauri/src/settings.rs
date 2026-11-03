@@ -30,7 +30,7 @@ fn read_json(app: &tauri::AppHandle) -> serde_json::Map<String, serde_json::Valu
 fn write_json(app: &tauri::AppHandle, value: &serde_json::Map<String, serde_json::Value>) -> Result<(), String> {
 	let path = settings_path(app)?;
 	let text = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
-	fs::write(path, text).map_err(|e| e.to_string())
+	crate::safe_fs::write_atomic(path, text).map_err(|e| e.to_string())
 }
 
 fn string_key(app: &tauri::AppHandle, key: &str) -> Option<String> {
@@ -122,7 +122,7 @@ pub fn read_project_state(app: &tauri::AppHandle, id: &str) -> Result<String, St
 
 pub fn write_project_state(app: &tauri::AppHandle, id: &str, contents: &str) -> Result<(), String> {
 	let path = project_state_path(app, id)?;
-	fs::write(path, contents).map_err(|e| e.to_string())
+	crate::safe_fs::write_atomic(path, contents).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -133,5 +133,5 @@ pub fn read_settings(app: tauri::AppHandle) -> Result<String, String> {
 #[tauri::command]
 pub fn write_settings(app: tauri::AppHandle, contents: String) -> Result<(), String> {
 	let path = settings_path(&app)?;
-	fs::write(path, contents).map_err(|e| e.to_string())
+	crate::safe_fs::write_atomic(path, contents).map_err(|e| e.to_string())
 }

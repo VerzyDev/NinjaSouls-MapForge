@@ -112,7 +112,7 @@ pub fn read_script(name: String, lua: State<LuaState>) -> Result<String, String>
 pub fn write_script(name: String, content: String, lua: State<LuaState>) -> Result<usize, String> {
 	let mut h = lua.lock().map_err(|e| e.to_string())?;
 	let path = script_path(&h, &name)?;
-	std::fs::write(&path, content).map_err(|e| format!("{}: {}", path.display(), e))?;
+	crate::safe_fs::write_atomic(&path, content).map_err(|e| format!("{}: {}", path.display(), e))?;
 	match h.load_all() {
 		Ok(n) => Ok(n),
 		Err(e) => {

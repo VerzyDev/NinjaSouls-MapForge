@@ -27,7 +27,7 @@ pub fn write_file_text(path: String, contents: String) -> Result<(), String> {
 	if let Some(dir) = PathBuf::from(&path).parent().filter(|d| !d.as_os_str().is_empty()) {
 		fs::create_dir_all(dir).map_err(|e| format!("Failed to create folder {}: {}", dir.display(), e))?;
 	}
-	fs::write(&path, contents).map_err(|e| format!("Failed to write file {}: {}", path, e))
+	crate::safe_fs::write_atomic(&path, contents).map_err(|e| format!("Failed to write file {}: {}", path, e))
 }
 
 #[tauri::command]
@@ -57,7 +57,7 @@ pub async fn backup_map(path: String, keep: u32) -> Result<(), String> {
 			None => continue,
 		};
 		if name.starts_with(&prefix_dot) || name.starts_with(&prefix_dash) {
-			let _ = fs::copy(&p, snap.join(&name));
+			let _ = crate::safe_fs::copy_synced(&p, snap.join(&name));
 		}
 	}
 	let mut snaps: Vec<PathBuf> = fs::read_dir(&backups_root)
