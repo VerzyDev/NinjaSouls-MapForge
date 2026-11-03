@@ -36,7 +36,7 @@ export const useMapSpawns = (active: SpawnSource | null, creatureDb: Map<string,
         return;
       }
       const props = await getMapProperties(active.mapId).catch(() => null);
-      const fallback = baseName(path).replace(/\.otbm$/i, '-spawn.xml');
+      const fallback = baseName(path).replace(/\.otbm$/i, '-spawn.json');
       const file = props?.spawnFile || fallback;
       const result = await loadSpawns(dirOf(path) + file, creatureDb);
       if (!cancelled) setSpawns(result);

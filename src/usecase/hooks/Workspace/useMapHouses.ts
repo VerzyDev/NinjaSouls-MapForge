@@ -36,7 +36,7 @@ export const useMapHouses = (active: HouseSource | null): MapHousesApi => {
         return;
       }
       const props = await getMapProperties(active.mapId).catch(() => null);
-      const fallback = baseName(path).replace(/\.otbm$/i, '-house.xml');
+      const fallback = baseName(path).replace(/\.otbm$/i, '-house.json');
       const file = props?.houseFile || fallback;
       const result = await loadHouses(dirOf(path) + file);
       if (!cancelled) setHouses(result);

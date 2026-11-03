@@ -30,7 +30,7 @@ export const useMapWaypoints = (active: WaypointSource | null, onMigrated?: () =
     const mapId = active.mapId;
     let cancelled = false;
     void (async () => {
-      const file = baseName(path).replace(/\.otbm$/i, '-waypoint.xml');
+      const file = baseName(path).replace(/\.otbm$/i, '-waypoint.json');
       const sidecar = await loadWaypoints(dirOf(path) + file);
       if (cancelled) return;
       if (sidecar.list.length > 0) {

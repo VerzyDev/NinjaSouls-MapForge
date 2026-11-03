@@ -1,5 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 
+import { isJsonText } from '~/lib/map/sidecars';
+import { parseHouseJson } from '~/lib/map/houseFile';
+import { readSidecarText } from '~/adapter/sidecarText';
 import { House, MapHouses, emptyMapHouses } from '~/domain/house';
 
 const intAttr = (el: Element, name: string): number => Number(el.getAttribute(name) ?? 0);
@@ -18,12 +21,9 @@ export async function setModelHouses(mapId: number, houses: MapHouses): Promise<
 }
 
 export async function loadHouses(path: string): Promise<MapHouses> {
-  let content: string;
-  try {
-    content = await invoke<string>('read_file_text', { path });
-  } catch {
-    return emptyMapHouses();
-  }
+  const content = await readSidecarText(path);
+  if (content == null) return emptyMapHouses();
+  if (isJsonText(content)) return { list: parseHouseJson(content) };
 
   const doc = new DOMParser().parseFromString(content, 'text/xml');
   const list: House[] = [];
@@ -42,26 +42,4 @@ export async function loadHouses(path: string): Promise<MapHouses> {
     });
   }
   return { list };
-}
-
-const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-export function serializeHouseXml(houses: MapHouses, sizes: Record<number, number>): string {
-  const lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<houses>'];
-  for (const h of houses.list) {
-    const attrs = [
-      `name="${esc(h.name)}"`,
-      `houseid="${h.id}"`,
-      `entryx="${h.entryX}"`,
-      `entryy="${h.entryY}"`,
-      `entryz="${h.entryZ}"`,
-      `rent="${h.rent}"`,
-      `townid="${h.townId}"`,
-      `size="${sizes[h.id] ?? 0}"`
-    ];
-    if (h.guildhall) attrs.push('guildhall="1"');
-    lines.push(`\t<house ${attrs.join(' ')}/>`);
-  }
-  lines.push('</houses>', '');
-  return lines.join('\n');
 }

@@ -92,35 +92,3 @@ export function updateSpawn(spawns: MapSpawns, center: Position, radius: number,
   const placements = spawns.placements.map((p) => (covers(area, p.x, p.y, p.z) ? { ...p, spawntime } : p));
   return buildMapSpawns(areas, placements);
 }
-
-const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-function emitCreature(c: CreaturePlacement, cx: number, cy: number): string {
-  const tag = c.isNpc ? 'npc' : 'monster';
-  return `\t\t<${tag} name="${esc(c.name)}" x="${c.x - cx}" y="${c.y - cy}" z="${c.z}" spawntime="${c.spawntime}" direction="${c.direction}"/>`;
-}
-
-export function serializeSpawnXml(spawns: MapSpawns): string {
-  const lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<spawns>'];
-  const assigned = new Set<CreaturePlacement>();
-
-  for (const a of spawns.areas) {
-    lines.push(`\t<spawn centerx="${a.x}" centery="${a.y}" centerz="${a.z}" radius="${a.radius}">`);
-    for (const c of spawns.placements) {
-      if (assigned.has(c) || !covers(a, c.x, c.y, c.z)) continue;
-      assigned.add(c);
-      lines.push(emitCreature(c, a.x, a.y));
-    }
-    lines.push('\t</spawn>');
-  }
-
-  for (const c of spawns.placements) {
-    if (assigned.has(c)) continue;
-    lines.push(`\t<spawn centerx="${c.x}" centery="${c.y}" centerz="${c.z}" radius="1">`);
-    lines.push(emitCreature(c, c.x, c.y));
-    lines.push('\t</spawn>');
-  }
-
-  lines.push('</spawns>', '');
-  return lines.join('\n');
-}

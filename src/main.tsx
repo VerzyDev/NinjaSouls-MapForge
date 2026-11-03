@@ -26,7 +26,7 @@ import AboutDialog from '~/components/AboutDialog';
 import { MIN_ZOOM, MAX_ZOOM } from '~/usecase/zoom';
 import { openReplaceItem } from '~/adapter/windows';
 import PalettePanel from '~/components/PalettePanel';
-import { serializeHouseXml } from '~/adapter/houses';
+import { serializeHouseJson } from '~/lib/map/houseFile';
 import ScriptEditor from '~/components/ScriptEditor';
 import { MapCustomZones } from '~/domain/customZone';
 import { Town, MapView, Position } from '~/domain/map';
@@ -37,13 +37,14 @@ import AssetsMissing from '~/components/AssetsMissing';
 import { Button } from '~/components/commons/ui/button';
 import { useSetting } from '~/usecase/hooks/useSetting';
 import ReferenceImage from '~/components/ReferenceImage';
-import { serializeSpawnXml } from '~/usecase/spawnEdits';
+import { jsonSidecarFile } from '~/lib/map/sidecars';
+import { serializeSpawnJson } from '~/lib/map/spawnFile';
 import { CHUNK } from '~/components/MapCanvas/constants';
 import { isLuaEnabled } from '~/usecase/util/luaSettings';
 import { formatPosition } from '~/usecase/positionFormat';
 import ShortcutsDialog from '~/components/ShortcutsDialog';
 import { Waypoint, MapWaypoints } from '~/domain/waypoint';
-import { serializeWaypointXml } from '~/adapter/waypoints';
+import { serializeWaypointJson } from '~/lib/map/waypointFile';
 import Minimap, { MinimapApi } from '~/components/Minimap';
 import PanelDockMenu from '~/components/Dock/PanelDockMenu';
 import { useDock } from '~/usecase/hooks/Workspace/useDock';
@@ -90,7 +91,8 @@ import {
 import './styles/index.css';
 
 const dirOf = (path: string) => path.replace(/[^\\/]+$/, '');
-const spawnFileFallback = (path: string) => (path.split(/[\\/]/).pop() ?? 'map.otbm').replace(/\.otbm$/i, '-spawn.xml');
+const spawnFileFallback = (path: string) => (path.split(/[\\/]/).pop() ?? 'map.otbm').replace(/\.otbm$/i, '-spawn.json');
+const houseFileFallback = (path: string) => (path.split(/[\\/]/).pop() ?? 'map.otbm').replace(/\.otbm$/i, '-house.json');
 
 const spriteBlockFor = (
   clientId: number,
@@ -335,57 +337,46 @@ const App = () => {
   }, []);
   const handleStatus = React.useCallback((message: string) => statusApiRef.current?.flash(message), []);
 
+  const sidecarFiles = React.useCallback(async (mapId: number, path: string) => {
+    const props = await getMapProperties(mapId).catch(() => null);
+    const spawnFile = jsonSidecarFile(props?.spawnFile || spawnFileFallback(path));
+    const houseFile = jsonSidecarFile(props?.houseFile || houseFileFallback(path));
+    if (props && (props.spawnFile !== spawnFile || props.houseFile !== houseFile)) {
+      await setMapProperties(mapId, {
+        width: props.width,
+        height: props.height,
+        description: props.description,
+        spawnFile,
+        houseFile,
+        otbmVersion: props.otbmVersion,
+        itemsMinor: props.itemsMinor
+      }).catch(() => undefined);
+    }
+    return { spawnFile, houseFile };
+  }, []);
+
   const persistSpawns = React.useCallback(async (mapId: number, path: string) => {
     if (!spawnsDirty.current || !spawnsRef.current) return;
-    const props = await getMapProperties(mapId).catch(() => null);
-    let file = props?.spawnFile ?? '';
-    if (!file) {
-      file = spawnFileFallback(path);
-      if (props) {
-        await setMapProperties(mapId, {
-          width: props.width,
-          height: props.height,
-          description: props.description,
-          spawnFile: file,
-          houseFile: props.houseFile,
-          otbmVersion: props.otbmVersion,
-          itemsMinor: props.itemsMinor
-        }).catch(() => undefined);
-      }
-    }
-    await invoke('write_file_text', { path: dirOf(path) + file, contents: serializeSpawnXml(spawnsRef.current) });
+    const file = (await sidecarFiles(mapId, path)).spawnFile;
+    const spawns = spawnsRef.current;
+    await invoke('write_file_text', { path: dirOf(path) + file, contents: serializeSpawnJson(spawns.areas, spawns.placements) });
     spawnsDirty.current = false;
-  }, []);
+  }, [sidecarFiles]);
 
   const persistWaypoints = React.useCallback(async (path: string) => {
     if (!waypointsDirty.current || !waypointsRef.current) return;
-    const file = (path.split(/[\\/]/).pop() ?? 'map.otbm').replace(/\.otbm$/i, '-waypoint.xml');
-    await invoke('write_file_text', { path: dirOf(path) + file, contents: serializeWaypointXml(waypointsRef.current) });
+    const file = (path.split(/[\\/]/).pop() ?? 'map.otbm').replace(/\.otbm$/i, '-waypoint.json');
+    await invoke('write_file_text', { path: dirOf(path) + file, contents: serializeWaypointJson(waypointsRef.current.list) });
     waypointsDirty.current = false;
   }, []);
 
   const persistHouses = React.useCallback(async (mapId: number, path: string) => {
     if (!housesDirty.current || !housesRef.current) return;
-    const props = await getMapProperties(mapId).catch(() => null);
-    let file = props?.houseFile ?? '';
-    if (!file) {
-      file = (path.split(/[\\/]/).pop() ?? 'map.otbm').replace(/\.otbm$/i, '-house.xml');
-      if (props) {
-        await setMapProperties(mapId, {
-          width: props.width,
-          height: props.height,
-          description: props.description,
-          spawnFile: props.spawnFile,
-          houseFile: file,
-          otbmVersion: props.otbmVersion,
-          itemsMinor: props.itemsMinor
-        }).catch(() => undefined);
-      }
-    }
+    const file = (await sidecarFiles(mapId, path)).houseFile;
     const sizes = await houseSizes(mapId).catch(() => ({}));
-    await invoke('write_file_text', { path: dirOf(path) + file, contents: serializeHouseXml(housesRef.current, sizes) });
+    await invoke('write_file_text', { path: dirOf(path) + file, contents: serializeHouseJson(housesRef.current.list, sizes) });
     housesDirty.current = false;
-  }, []);
+  }, [sidecarFiles]);
 
   const persistCustomZones = React.useCallback(async (path: string) => {
     if (!customZonesDirty.current || !customZonesRef.current) return;
@@ -393,11 +384,17 @@ const App = () => {
     customZonesDirty.current = false;
   }, []);
 
-  const pushModelSidecars = React.useCallback(async (mapId: number, path: string) => {
-    if (hasSidecars(path)) return;
-    if (spawnsDirty.current && spawnsRef.current) await setModelSpawns(mapId, spawnsRef.current);
-    if (housesDirty.current && housesRef.current) await setModelHouses(mapId, housesRef.current);
-  }, []);
+  const pushModelSidecars = React.useCallback(
+    async (mapId: number, path: string) => {
+      if (hasSidecars(path)) {
+        await sidecarFiles(mapId, path);
+        return;
+      }
+      if (spawnsDirty.current && spawnsRef.current) await setModelSpawns(mapId, spawnsRef.current);
+      if (housesDirty.current && housesRef.current) await setModelHouses(mapId, housesRef.current);
+    },
+    [sidecarFiles]
+  );
 
   const persistSidecars = React.useCallback(
     async (mapId: number, path: string) => {

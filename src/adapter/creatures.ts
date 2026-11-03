@@ -1,6 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 
 import { PaletteTileset } from '~/domain/palette';
+import { isJsonText } from '~/lib/map/sidecars';
+import { parseSpawnJson } from '~/lib/map/spawnFile';
+import { readSidecarText } from '~/adapter/sidecarText';
 import { MapSpawns, SpawnArea, CreatureLook, buildMapSpawns, emptyMapSpawns, CreaturePlacement } from '~/domain/creature';
 
 export interface CreatureDirs {
@@ -171,11 +174,13 @@ function resolveOutfit(name: string, db: Map<string, CreatureLook>) {
 const intAttr = (el: Element, name: string): number => Number(el.getAttribute(name) ?? 0);
 
 export async function loadSpawns(spawnPath: string, db: Map<string, CreatureLook>): Promise<MapSpawns> {
-  let content: string;
-  try {
-    content = await invoke<string>('read_file_text', { path: spawnPath });
-  } catch {
-    return emptyMapSpawns();
+  const content = await readSidecarText(spawnPath);
+  if (content == null) return emptyMapSpawns();
+
+  if (isJsonText(content)) {
+    const parsed = parseSpawnJson(content);
+    const placements = parsed.creatures.map((c) => ({ ...c, ...resolveOutfit(c.name, db) }));
+    return buildMapSpawns(parsed.areas, placements);
   }
 
   const doc = new DOMParser().parseFromString(content, 'text/xml');
