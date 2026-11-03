@@ -14,7 +14,10 @@ export interface MapCustomZonesApi {
   setCustomZones: React.Dispatch<React.SetStateAction<MapCustomZones | null>>;
 }
 
-export const useMapCustomZones = (active: CustomZoneSource | null): MapCustomZonesApi => {
+export const useMapCustomZones = (
+  active: CustomZoneSource | null,
+  pathFor: (mapPath: string) => string = customZonesPath
+): MapCustomZonesApi => {
   const [customZones, setCustomZones] = React.useState<MapCustomZones | null>(null);
 
   React.useEffect(() => {
@@ -23,13 +26,13 @@ export const useMapCustomZones = (active: CustomZoneSource | null): MapCustomZon
       return;
     }
     let cancelled = false;
-    void loadCustomZones(customZonesPath(active.path)).then((zones) => {
+    void loadCustomZones(pathFor(active.path)).then((zones) => {
       if (!cancelled) setCustomZones(zones);
     });
     return () => {
       cancelled = true;
     };
-  }, [active?.id, active?.path]);
+  }, [active?.id, active?.path, pathFor]);
 
   return { customZones, setCustomZones };
 };

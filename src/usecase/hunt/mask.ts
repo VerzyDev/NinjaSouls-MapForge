@@ -1,4 +1,5 @@
 import { Thing } from '~/domain/thing';
+import { ChunkTiles } from '~/domain/map';
 import { Mask } from '~/lib/generator/hunt';
 import { packChunkKey, fetchMapChunks } from '~/adapter/map';
 
@@ -9,6 +10,18 @@ export interface HuntGrid {
   minY: number;
   z: number;
   mask: Mask;
+  stairs: Mask;
+}
+
+export function isWalkableTile(ct: ChunkTiles, i: number, items: Map<number, Thing>): boolean {
+  let hasGround = false;
+  for (let s = ct.itemOffset[i]; s < ct.itemOffset[i + 1]; s++) {
+    const thing = items.get(ct.clientIds[s]);
+    if (!thing) continue;
+    if (thing.isUnpassable) return false;
+    if (thing.isGround) hasGround = true;
+  }
+  return hasGround;
 }
 
 export async function readWalkableMask(
@@ -18,11 +31,13 @@ export async function readWalkableMask(
   minY: number,
   maxX: number,
   maxY: number,
-  items: Map<number, Thing>
+  items: Map<number, Thing>,
+  floorChange?: Set<number>
 ): Promise<HuntGrid> {
   const w = maxX - minX + 1;
   const h = maxY - minY + 1;
   const mask: Mask = Array.from({ length: h }, () => new Array(w).fill(false));
+  const stairs: Mask = Array.from({ length: h }, () => new Array(w).fill(false));
 
   const keys: number[] = [];
   const minCx = Math.floor(minX / CHUNK);
@@ -38,18 +53,15 @@ export async function readWalkableMask(
       const x = ct.tileX[i];
       const y = ct.tileY[i];
       if (x < minX || x > maxX || y < minY || y > maxY) continue;
-      const start = ct.itemOffset[i];
-      const end = ct.itemOffset[i + 1];
-      let hasGround = false;
-      let blocked = false;
-      for (let s = start; s < end; s++) {
-        const thing = items.get(ct.clientIds[s]);
-        if (!thing) continue;
-        if (thing.isGround) hasGround = true;
-        if (thing.isUnpassable) blocked = true;
+      if (isWalkableTile(ct, i, items)) mask[y - minY][x - minX] = true;
+      if (!floorChange?.size) continue;
+      for (let s = ct.itemOffset[i]; s < ct.itemOffset[i + 1]; s++) {
+        if (floorChange.has(ct.serverIds[s])) {
+          stairs[y - minY][x - minX] = true;
+          break;
+        }
       }
-      if (hasGround && !blocked) mask[y - minY][x - minX] = true;
     }
   }
-  return { minX, minY, z, mask };
+  return { minX, minY, z, mask, stairs };
 }

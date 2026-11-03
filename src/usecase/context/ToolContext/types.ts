@@ -9,6 +9,8 @@ import { MountainOptions, ResolvedMountain } from '~/domain/mountain';
 
 export type CustomZoneMode = 'brush' | 'fill' | 'polygon';
 
+export type ZoneLayer = 'server' | 'hunt';
+
 export interface GenerateSignal {
   biomes: ResolvedBiome[];
   opts: GenerateOptions;
@@ -25,11 +27,19 @@ export interface HuntArea {
   z: number;
 }
 
-export interface HuntPreviewParams {
-  area: HuntArea;
+export type HuntMode = 'rotation' | 'box' | 'density';
+
+export interface HuntRescatterParams {
+  mode: HuntMode;
+  boxSize: number;
+  lureLength: number;
   viewW: number;
   viewH: number;
-  boxSize: number;
+}
+
+export interface HuntPreviewParams extends HuntRescatterParams {
+  area: HuntArea | null;
+  zoneId: number | null;
   spawntime: number;
 }
 
@@ -37,16 +47,19 @@ export interface HuntPreviewSignal extends HuntPreviewParams {
   nonce: number;
 }
 
-export interface HuntRescatterSignal {
-  boxSize: number;
-  viewW: number;
-  viewH: number;
+export interface HuntRescatterSignal extends HuntRescatterParams {
   nonce: number;
 }
 
 export interface HuntMeta {
   points: number;
   steps: number;
+  short: number;
+  monsters: number;
+  isolated: number;
+  walkable: number;
+  floors: number[];
+  lures: number;
 }
 
 export interface HuntViewPreview {
@@ -63,6 +76,7 @@ export interface HuntMonster {
   legs: number;
   feet: number;
   spawntime: number;
+  count: number;
 }
 
 export interface PaletteReveal {
@@ -102,6 +116,7 @@ export interface ToolContextValue {
   activeCustomZoneId: number | null;
   customZoneAllFloors: boolean;
   customZoneMode: CustomZoneMode;
+  zoneLayer: ZoneLayer;
   pickingPosition: boolean;
   setPickingPosition: (picking: boolean) => void;
   pinPosition: Position | null;
@@ -154,6 +169,7 @@ export interface ToolContextValue {
   setActiveCustomZone: (id: number | null) => void;
   setCustomZoneAllFloors: (allFloors: boolean) => void;
   setCustomZoneMode: (mode: CustomZoneMode) => void;
+  setZoneLayer: (layer: ZoneLayer) => void;
   setEraserMode: (mode: EraserMode) => void;
   revealInPalette: (category: PaletteCategoryId, serverId: number, name?: string) => void;
   setPaletteCategory: (category: PaletteCategoryId) => void;

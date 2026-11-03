@@ -24,6 +24,7 @@ import {
   HuntPreviewSignal,
   ToolProviderProps,
   HuntRescatterSignal,
+  ZoneLayer,
   CustomZoneMode,
   PaletteCategorySignal
 } from './types';
@@ -90,6 +91,7 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
   const [activeCustomZoneId, setActiveCustomZone] = React.useState<number | null>(null);
   const [customZoneAllFloors, setCustomZoneAllFloors] = React.useState(true);
   const [customZoneMode, setCustomZoneMode] = React.useState<CustomZoneMode>('brush');
+  const [zoneLayer, setZoneLayerState] = React.useState<ZoneLayer>('server');
   const [pickingPosition, setPickingPosition] = React.useState(false);
   const [pinPosition, setPinPosition] = React.useState<Position | null>(null);
   const [ctrlErase, setCtrlErase] = React.useState(false);
@@ -103,7 +105,7 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
   const [huntArea, setHuntArea] = React.useState<HuntArea | null>(null);
   const [huntAreaSelecting, setHuntAreaSelecting] = React.useState(false);
   const [huntEditing, setHuntEditing] = React.useState(false);
-  const [huntView, setHuntView] = React.useState<HuntViewPreview>({ show: false, w: 15, h: 11 });
+  const [huntView, setHuntView] = React.useState<HuntViewPreview>({ show: false, w: 21, h: 11 });
   const [huntMonsters, setHuntMonsters] = React.useState<HuntMonster[]>([]);
   const [huntRescatterSignal, setHuntRescatterSignal] = React.useState<HuntRescatterSignal | null>(null);
   const [huntGenerateNonce, setHuntGenerateNonce] = React.useState(0);
@@ -286,6 +288,11 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
     applyDoodadThickness(percent ?? -1).catch((err) => console.error('Failed to set doodad thickness', err));
   }, []);
 
+  const setZoneLayer = React.useCallback((layer: ZoneLayer) => {
+    setZoneLayerState(layer);
+    setActiveCustomZone(null);
+  }, []);
+
   const requestHuntGenerate = React.useCallback(() => setHuntGenerateNonce((n) => n + 1), []);
   const requestHuntClear = React.useCallback(() => setHuntClearNonce((n) => n + 1), []);
 
@@ -302,6 +309,7 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
       activeCustomZoneId,
       customZoneAllFloors,
       customZoneMode,
+      zoneLayer,
       pickingPosition,
       setPickingPosition,
       pinPosition,
@@ -349,6 +357,7 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
       setActiveCustomZone,
       setCustomZoneAllFloors,
       setCustomZoneMode,
+      setZoneLayer,
       setEraserMode,
       revealInPalette,
       setPaletteCategory,
@@ -369,6 +378,7 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
       activeCustomZoneId,
       customZoneAllFloors,
       customZoneMode,
+      zoneLayer,
       pickingPosition,
       setPickingPosition,
       pinPosition,
@@ -415,6 +425,7 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
       setActiveCustomZone,
       setCustomZoneAllFloors,
       setCustomZoneMode,
+      setZoneLayer,
       setEraserMode,
       revealInPalette,
       setPaletteCategory,

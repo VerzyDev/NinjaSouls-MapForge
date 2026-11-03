@@ -5,6 +5,7 @@ import { Dices, Sparkles } from 'lucide-react';
 import { cn } from '~/usecase/classNames';
 import { ResolvedBiome } from '~/domain/biome';
 import { PaletteTileset } from '~/domain/palette';
+import { MapCustomZones } from '~/domain/customZone';
 import { Input } from '~/components/commons/ui/input';
 import { resolveMountain } from '~/adapter/mountains';
 import { useTool } from '~/usecase/context/ToolContext';
@@ -297,7 +298,13 @@ const ModeToggle = ({ mode, onMode }: { mode: GenMode; onMode: (m: GenMode) => v
 
 const GEN_MODE_KEY = 'generatorMode';
 
-const GeneratorView = ({ creatureTilesets }: { creatureTilesets?: PaletteTileset[] }) => {
+interface GeneratorViewProps {
+  creatureTilesets?: PaletteTileset[];
+  huntZones: MapCustomZones | null;
+  onEditHuntZones: (next: MapCustomZones) => void;
+}
+
+const GeneratorView = ({ creatureTilesets, huntZones, onEditHuntZones }: GeneratorViewProps) => {
   const [mode, setMode] = React.useState<GenMode>('terrain');
   const restored = React.useRef(false);
 
@@ -321,7 +328,7 @@ const GeneratorView = ({ creatureTilesets }: { creatureTilesets?: PaletteTileset
     <div className="flex min-h-0 flex-1 flex-col">
       <ModeToggle mode={mode} onMode={setMode} />
       {mode === 'hunt' ? (
-        <HuntView creatureTilesets={creatureTilesets} />
+        <HuntView zones={huntZones} onEditZones={onEditHuntZones} creatureTilesets={creatureTilesets} />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
           <GeneratorPanel />

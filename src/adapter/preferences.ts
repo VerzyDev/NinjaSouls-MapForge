@@ -120,9 +120,9 @@ export interface HuntConfig {
 }
 
 export const defaultHuntConfig: HuntConfig = {
-  viewWidth: 15,
+  viewWidth: 21,
   viewHeight: 11,
-  aggroWidth: 15,
+  aggroWidth: 21,
   aggroHeight: 11,
   boxSize: 8
 };

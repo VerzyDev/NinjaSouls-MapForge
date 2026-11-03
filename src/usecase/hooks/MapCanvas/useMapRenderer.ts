@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { isZoneTool } from '~/domain/tools';
-import { Point } from '~/lib/generator/hunt';
+import { Point, interleaveCounts } from '~/lib/generator/hunt';
 import { visibleZoneBits } from '~/domain/zones';
 import { slotUV, GLRenderer } from '~/usecase/glRenderer';
 import { MapCanvasInputs } from '~/components/MapCanvas/types';
@@ -342,7 +342,8 @@ export function useMapRenderer(deps: RendererDeps) {
     z: number
   ) {
     const zones = inputs.current.customZones;
-    if (inputs.current.activeTool !== 'custom_zone' || !zones || zones.tiles.size === 0) return;
+    const showHunt = inputs.current.huntEditing && inputs.current.zoneLayer === 'hunt';
+    if ((inputs.current.activeTool !== 'custom_zone' && !showHunt) || !zones || zones.tiles.size === 0) return;
 
     const minX = Math.max(0, Math.floor(camX / TILE));
     const minY = Math.max(0, Math.floor(camY / TILE));
@@ -388,12 +389,12 @@ export function useMapRenderer(deps: RendererDeps) {
     for (const id of order) {
       const coords = tilesByZone.get(id)!;
       const isSelected = id === selected;
-      const width = isSelected ? line * 2 : line;
+      const width = line;
       ctx.strokeStyle = ctx.fillStyle = customZoneColor(byId.get(id), id);
-      ctx.globalAlpha = isSelected ? 1 : selected != null ? 0.5 : 0.85;
+      ctx.globalAlpha = isSelected ? 1 : selected != null ? 0.45 : 0.85;
       if (isSelected) {
         ctx.save();
-        ctx.globalAlpha = 0.16;
+        ctx.globalAlpha = 0.3;
         for (let i = 0; i < coords.length; i += 3) {
           ctx.fillRect((coords[i] * TILE - camX) * zoom, (coords[i + 1] * TILE - camY) * zoom, size, size);
         }
@@ -864,7 +865,9 @@ export function useMapRenderer(deps: RendererDeps) {
     }
 
     const showBrush = tool === 'brush' && brush != null && brush.serverId != null && !ctrlErase;
-    const showEraser = tool === 'eraser' || (tool === 'brush' && brush != null && brush.serverId != null && ctrlErase);
+    const showEraser =
+      tool === 'eraser' ||
+      (tool === 'brush' && brush != null && (brush.serverId != null || brush.kind === 'creature') && ctrlErase);
     const showZone = isZoneTool(tool) || (tool === 'custom_zone' && inputs.current.activeCustomZoneId != null);
     const showHouse = tool === 'house' && inputs.current.activeHouseId != null;
     const showBorderize = tool === 'borderize';
@@ -1356,9 +1359,13 @@ export function useMapRenderer(deps: RendererDeps) {
 
     const hSession = scene.huntSession.current;
     const hMonsters = inputs.current.huntMonsters;
-    if (inputs.current.huntEditing && hSession && hMonsters.length > 0 && scene.huntRouteZ.current === floorZ) {
-      const placements: CreaturePlacement[] = hSession.monsterTiles.map((t, i) => {
-        const m = hMonsters[i % hMonsters.length];
+    if (inputs.current.huntEditing && hSession && hMonsters.some((m) => m.count > 0) && scene.huntRouteZ.current === floorZ) {
+      const roster = interleaveCounts(hMonsters.map((m) => m.count));
+      const slot = new Map<number, number>();
+      const placements: CreaturePlacement[] = hSession.monsterTiles.map((t) => {
+        const j = slot.get(t.box) ?? 0;
+        slot.set(t.box, j + 1);
+        const m = hMonsters[roster[j % roster.length]];
         return {
           x: t.x + hSession.minX,
           y: t.y + hSession.minY,

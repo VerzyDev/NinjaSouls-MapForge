@@ -12,7 +12,7 @@ import { ToolId, EraserMode } from '~/domain/tools';
 import { MapCustomZones } from '~/domain/customZone';
 import { MapView, MapMeta, Position } from '~/domain/map';
 import { ActiveBrush, ItemBrushKind, PaletteCategoryId } from '~/domain/palette';
-import { HuntArea, HuntMeta, HuntMonster, HuntViewPreview, CustomZoneMode } from '~/usecase/context/ToolContext/types';
+import { HuntArea, HuntMeta, ZoneLayer, HuntMonster, HuntViewPreview, CustomZoneMode } from '~/usecase/context/ToolContext/types';
 
 export interface Camera {
   x: number;
@@ -121,7 +121,10 @@ export interface MapCanvasProps {
   onEditHouses: (next: MapHouses) => void;
   onHousesDirty: () => void;
   customZones: MapCustomZones | null;
+  huntZones: MapCustomZones | null;
+  floorChangeIds: Set<number>;
   onEditCustomZones: (next: MapCustomZones) => void;
+  onEditZoneLayer: (layer: ZoneLayer, next: MapCustomZones) => void;
   placingWaypoint: string | null;
   onPlaceWaypoint: () => void;
   floorZ: number;
@@ -187,6 +190,7 @@ export interface MapCanvasContextInputs {
   activeCustomZoneId: number | null;
   customZoneAllFloors: boolean;
   customZoneMode: CustomZoneMode;
+  zoneLayer: ZoneLayer;
   pickingPosition: boolean;
   pinPosition: Position | null;
   onToolChange: (tool: ToolId) => void;

@@ -49,7 +49,9 @@ interface PalettePanelProps {
   onEditHouses: (next: MapHouses) => void;
   onGotoHouse: (house: House) => void;
   customZones: MapCustomZones | null;
+  huntZones: MapCustomZones | null;
   onEditCustomZones: (next: MapCustomZones) => void;
+  onEditHuntZones: (next: MapCustomZones) => void;
   creatureTilesets?: PaletteTileset[];
   creatureNeedsPicker?: boolean;
   onPickCreatureDir?: () => void;
@@ -84,7 +86,9 @@ const PalettePanel = ({
   onEditHouses,
   onGotoHouse,
   customZones,
+  huntZones,
   onEditCustomZones,
+  onEditHuntZones,
   creatureTilesets,
   creatureNeedsPicker,
   onPickCreatureDir
@@ -451,7 +455,7 @@ const PalettePanel = ({
       ) : isZones ? (
         <ZonesList zones={customZones} onEdit={onEditCustomZones} />
       ) : isGenerator ? (
-        <GeneratorView creatureTilesets={creatureTilesets} />
+        <GeneratorView huntZones={huntZones} onEditHuntZones={onEditHuntZones} creatureTilesets={creatureTilesets} />
       ) : (
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-2">
           {tiles.length === 0 ? (

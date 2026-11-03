@@ -1,7 +1,7 @@
 import { test, expect } from 'bun:test';
 
 import { Mask } from './hunt';
-import { buildRoute, reachableFrom } from './huntRoute';
+import { buildLoops, buildRoute, nodePerArea, reachableFrom, keepMainAreas } from './huntRoute';
 
 function grid(rows: string[]): Mask {
   return rows.map((r) => r.split('').map((c) => c === '#'));
@@ -70,4 +70,70 @@ test('three connected nodes form a two-edge tree', () => {
   ]);
   expect(route.nodes.length).toBe(3);
   expect(route.edges.length).toBe(2);
+});
+
+test('keepMainAreas drops a pocket cut off by a tree but keeps the hall', () => {
+  const walk = grid(['#####.##', '#####.##', '#####.##']);
+  const area = grid(['########', '########', '########']);
+  const { mask, dropped } = keepMainAreas(walk, area, 10);
+  expect(dropped).toBe(1);
+  expect(mask[0][0]).toBe(true);
+  expect(mask[0][6]).toBe(false);
+  expect(mask[0][5]).toBe(false);
+});
+
+test('keepMainAreas joins zone parts linked by walkable tiles outside the zone', () => {
+  const walk = grid(['#######', '#######']);
+  const area = grid(['##...##', '##...##']);
+  const { mask, dropped } = keepMainAreas(walk, area, 10);
+  expect(dropped).toBe(0);
+  expect(mask[0][6]).toBe(true);
+});
+
+test('buildLoops closes a walkable loop through every point', () => {
+  const m = grid(['##########', '##########', '##########']);
+  const nodes = [
+    { x: 0, y: 1 },
+    { x: 9, y: 1 },
+    { x: 5, y: 0 }
+  ];
+  const loops = buildLoops(m, nodes);
+  expect(loops.length).toBe(1);
+  const path = loops[0].path;
+  for (const n of nodes) expect(path.some((p) => p.x === n.x && p.y === n.y)).toBe(true);
+  const first = path[0];
+  const last = path[path.length - 1];
+  expect(Math.max(Math.abs(first.x - last.x), Math.abs(first.y - last.y))).toBeLessThanOrEqual(1);
+  for (let i = 1; i < path.length; i++) {
+    expect(Math.max(Math.abs(path[i].x - path[i - 1].x), Math.abs(path[i].y - path[i - 1].y))).toBe(1);
+  }
+});
+
+test('buildLoops makes one loop per disconnected area', () => {
+  const m = grid(['###..###']);
+  const loops = buildLoops(m, [
+    { x: 0, y: 0 },
+    { x: 2, y: 0 },
+    { x: 7, y: 0 }
+  ]);
+  expect(loops.length).toBe(2);
+  expect(loops[1].path).toEqual([{ x: 7, y: 0 }]);
+});
+
+test('keepMainAreas keeps a small room reached by stairs from another floor', () => {
+  const walk = grid(['#####.###', '#####.###']);
+  const area = grid(['#####.###', '#####.###']);
+  const stairs = grid(['.......#.', '.........']);
+  const { mask, dropped } = keepMainAreas(walk, area, 10, stairs);
+  expect(dropped).toBe(0);
+  expect(mask[0][8]).toBe(true);
+  expect(keepMainAreas(walk, area, 10).dropped).toBe(1);
+});
+
+test('nodePerArea adds a centred point to every area that has none', () => {
+  const m = grid(['###...#####', '###...#####', '###...#####']);
+  const nodes = nodePerArea(m, [{ x: 1, y: 1 }]);
+  expect(nodes.length).toBe(2);
+  expect(nodes[1]).toEqual({ x: 8, y: 1 });
+  expect(nodePerArea(m, nodes).length).toBe(2);
 });

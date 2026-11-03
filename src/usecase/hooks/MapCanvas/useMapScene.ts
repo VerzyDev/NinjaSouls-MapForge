@@ -1,9 +1,9 @@
 import React from 'react';
 
-import { Mask, Point } from '~/lib/generator/hunt';
 import { Position, PreviewTile } from '~/domain/map';
+import { Mask, Point, BoxTile } from '~/lib/generator/hunt';
 import { HuntRouteRender } from '~/lib/generator/huntRoute';
-import { HuntArea } from '~/usecase/context/ToolContext/types';
+import { HuntArea, HuntMode } from '~/usecase/context/ToolContext/types';
 
 import { ClipboardGhostTile } from './meshBuilder';
 
@@ -16,6 +16,8 @@ export interface ImportGhost {
 }
 
 export interface HuntSession {
+  z: number;
+  route: HuntRouteRender | null;
   mask: Mask;
   minX: number;
   minY: number;
@@ -24,7 +26,14 @@ export interface HuntSession {
   viewW: number;
   viewH: number;
   nodes: Point[];
-  monsterTiles: Point[];
+  monsterTiles: BoxTile[];
+  zoneId: number | null;
+  mode: HuntMode;
+  isolated: number;
+  lureLength: number;
+  loops: Point[][];
+  lures: number;
+  lureTargets: number[];
 }
 
 export interface MoveDrag {
@@ -77,6 +86,7 @@ export interface MapScene {
   huntArea: React.MutableRefObject<HuntArea | null>;
   huntAreaDrag: React.MutableRefObject<{ start: Position; cur: Position } | null>;
   huntSession: React.MutableRefObject<HuntSession | null>;
+  huntFloors: React.MutableRefObject<HuntSession[]>;
   huntDrag: React.MutableRefObject<{ index: number; moved: boolean } | null>;
   huntSelected: React.MutableRefObject<number | null>;
   huntAreaBoxRef: React.RefObject<HTMLDivElement>;
@@ -139,6 +149,7 @@ export function useMapScene(): MapScene {
     huntArea: React.useRef<HuntArea | null>(null),
     huntAreaDrag: React.useRef<{ start: Position; cur: Position } | null>(null),
     huntSession: React.useRef<HuntSession | null>(null),
+    huntFloors: React.useRef<HuntSession[]>([]),
     huntDrag: React.useRef<{ index: number; moved: boolean } | null>(null),
     huntSelected: React.useRef<number | null>(null),
     huntAreaBoxRef: React.useRef<HTMLDivElement>(null),

@@ -119,6 +119,7 @@ const MapCanvas = (props: MapCanvasProps) => {
     activeCustomZoneId: tool.activeCustomZoneId,
     customZoneAllFloors: tool.customZoneAllFloors,
     customZoneMode: tool.customZoneMode,
+    zoneLayer: tool.zoneLayer,
     pickingPosition: tool.pickingPosition,
     pinPosition: tool.pinPosition,
     huntAreaSelecting: tool.huntAreaSelecting,
@@ -205,8 +206,12 @@ const MapCanvas = (props: MapCanvasProps) => {
   React.useEffect(() => {
     const signal = tool.huntRescatterSignal;
     if (!signal) return;
-    interaction.rescatterHunt(signal.boxSize, signal.viewW, signal.viewH);
+    interaction.rescatterHunt(signal);
   }, [tool.huntRescatterSignal?.nonce]);
+
+  React.useEffect(() => {
+    interaction.syncHuntFloor(props.floorZ);
+  }, [props.floorZ]);
 
   React.useEffect(() => {
     if (tool.huntGenerateNonce === 0) return;

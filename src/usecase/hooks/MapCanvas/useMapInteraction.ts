@@ -9,7 +9,7 @@ import { mapClientIds } from '~/adapter/assets';
 import { generateApply } from '~/adapter/biomes';
 import { brushForItem } from '~/adapter/palette';
 import { matchKeybind } from '~/usecase/keybinds';
-import { readWalkableMask } from '~/usecase/hunt/mask';
+import { isWalkableTile, readWalkableMask } from '~/usecase/hunt/mask';
 import { buildItemPreview } from '~/usecase/itemPreview';
 import { planGeneration } from '~/lib/generator/generate';
 import { formatPosition } from '~/usecase/positionFormat';
@@ -21,15 +21,33 @@ import { GenPlan, ResolvedBiome, GenerateOptions } from '~/domain/biome';
 import { ActiveBrush, PaletteBrush, ItemBrushKind } from '~/domain/palette';
 import { MapSpawns, emptyMapSpawns, buildMapSpawns } from '~/domain/creature';
 import { FloorRange, floorShift, selectionFloorBoxes } from '~/usecase/floors';
-import { HuntMeta, HuntPreviewParams } from '~/usecase/context/ToolContext/types';
-import { buildRoute, connectRoute, reachableFrom } from '~/lib/generator/huntRoute';
+import { HuntArea, HuntMeta, HuntPreviewParams, HuntRescatterParams } from '~/usecase/context/ToolContext/types';
+import {
+  HuntRouteRender,
+  buildLoops,
+  buildRoute,
+  nodePerArea,
+  connectRoute,
+  reachableFrom,
+  keepMainAreas
+} from '~/lib/generator/huntRoute';
 import { brushFootprint, clampBrushSize, BRUSH_SIZE_STEP } from '~/lib/brushFootprint';
 import { floodImage, ReferenceGrid, sampleReferenceGrid } from '~/lib/reference/flood';
 import { PEN_CURSOR, PEN_MOVE_CURSOR, PEN_CONVERT_CURSOR } from '~/usecase/penCursors';
 import { PenHot, PenPoint, PenAnchor, pathTiles, sampleBezierPath } from '~/lib/pen/path';
 import { TILE, CHUNK, SIZE_DRAG_PX, MOVE_THRESHOLD_SQ } from '~/components/MapCanvas/constants';
 import { planMountain, mountainMargin, mountainHeights } from '~/lib/generator/generateMountain';
-import { coverageMask, spreadPoints, scatterPoints, nearestWalkable } from '~/lib/generator/hunt';
+import {
+  fillBoxes,
+  coverageMask,
+  fillRotation,
+  spreadPoints,
+  createSpacing,
+  scatterPoints,
+  nearestWalkable,
+  interleaveCounts,
+  HUNT_SPAWN_RADIUS
+} from '~/lib/generator/hunt';
 import { waypointAt, MapWaypoints, emptyMapWaypoints, buildMapWaypoints } from '~/domain/waypoint';
 import { addWaypoint, moveWaypoint, removeWaypoint, renameWaypoint, nextWaypointName } from '~/usecase/waypointEdits';
 import {
@@ -97,7 +115,7 @@ import {
   attachUndoSidecar
 } from '~/adapter/map';
 
-import { MapScene } from './useMapScene';
+import { MapScene, HuntSession } from './useMapScene';
 import { MapCamera } from './useMapCamera';
 import { SpriteAtlas } from './useSpriteAtlas';
 import { ChunkTilesCache } from './useChunkTiles';
@@ -111,6 +129,7 @@ interface Sidecar {
   waypoints?: MapWaypoints;
   houses?: MapHouses;
   customZones?: CustomZoneFile;
+  huntZones?: CustomZoneFile;
   pen?: PenAnchor[];
 }
 
@@ -202,7 +221,8 @@ export function useMapInteraction(deps: InteractionDeps) {
     if (sc.spawns) inputs.current.onEditSpawns(buildMapSpawns(sc.spawns.areas ?? [], sc.spawns.placements ?? []));
     if (sc.waypoints) inputs.current.onEditWaypoints(buildMapWaypoints(sc.waypoints.list ?? []));
     if (sc.houses) inputs.current.onEditHouses(sc.houses);
-    if (sc.customZones) inputs.current.onEditCustomZones(fromCustomZoneFile(sc.customZones));
+    if (sc.customZones) inputs.current.onEditZoneLayer('server', fromCustomZoneFile(sc.customZones));
+    if (sc.huntZones) inputs.current.onEditZoneLayer('hunt', fromCustomZoneFile(sc.huntZones));
     if (sc.sel) selection.restore(sc.sel);
     if (sc.pen !== undefined) {
       penDrag.current = null;
@@ -315,17 +335,20 @@ export function useMapInteraction(deps: InteractionDeps) {
   }
 
   const markerEraseStroke = React.useRef<MapSpawns | null>(null);
+  const markerEraseCreaturesOnly = React.useRef(false);
 
   function applyMarkerEraseAt(pos: Position) {
     if (!beginStroke(pos)) return;
+    const creaturesOnly = markerEraseCreaturesOnly.current;
     const base = inputs.current.spawns ?? emptyMapSpawns();
     let next = base;
-    if (inputs.current.eraseMonsters) next = removeCreatureAt(next, pos);
-    if (inputs.current.eraseSpawns) next = removeSpawnAt(next, pos);
+    if (creaturesOnly || inputs.current.eraseMonsters) next = removeCreatureAt(next, pos);
+    if (!creaturesOnly && inputs.current.eraseSpawns) next = removeSpawnAt(next, pos);
     if (next !== base) inputs.current.onEditSpawns(next);
   }
 
-  function beginMarkerEraseStroke(e: React.MouseEvent) {
+  function beginMarkerEraseStroke(e: React.MouseEvent, creaturesOnly = false) {
+    markerEraseCreaturesOnly.current = creaturesOnly;
     markerEraseStroke.current = inputs.current.spawns ?? emptyMapSpawns();
     scene.lastPaintKey.current = null;
     applyMarkerEraseAt(tileAt(e));
@@ -991,12 +1014,63 @@ export function useMapInteraction(deps: InteractionDeps) {
     latest: MapCustomZones;
   } | null>(null);
 
+  function zoneSidecarKey(): 'customZones' | 'huntZones' {
+    return inputs.current.zoneLayer === 'hunt' ? 'huntZones' : 'customZones';
+  }
+
   function pushCustomZoneUndo(before: MapCustomZones, after: MapCustomZones) {
     void pushUndoSidecar(
       inputs.current.map.id,
-      JSON.stringify({ customZones: toCustomZoneFile(before) } satisfies Sidecar),
-      JSON.stringify({ customZones: toCustomZoneFile(after) } satisfies Sidecar)
+      JSON.stringify({ [zoneSidecarKey()]: toCustomZoneFile(before) } satisfies Sidecar),
+      JSON.stringify({ [zoneSidecarKey()]: toCustomZoneFile(after) } satisfies Sidecar)
     );
+  }
+
+  function onlyWalkable(set: boolean): boolean {
+    return set && inputs.current.zoneLayer === 'hunt';
+  }
+
+  function walkableCached(z: number, xs: number[], ys: number[]): { xs: number[]; ys: number[] } {
+    const index = new Map<string, Map<number, number> | null>();
+    const out = { xs: [] as number[], ys: [] as number[] };
+    for (let i = 0; i < xs.length; i++) {
+      const key = `${z},${Math.floor(xs[i] / CHUNK)},${Math.floor(ys[i] / CHUNK)}`;
+      const ct = tiles.data.current.get(key);
+      if (!ct) continue;
+      let byTile = index.get(key);
+      if (!byTile) {
+        byTile = new Map();
+        for (let t = 0; t < ct.tileX.length; t++) byTile.set(ct.tileY[t] * 65536 + ct.tileX[t], t);
+        index.set(key, byTile);
+      }
+      const t = byTile.get(ys[i] * 65536 + xs[i]);
+      if (t === undefined || !isWalkableTile(ct, t, inputs.current.items)) continue;
+      out.xs.push(xs[i]);
+      out.ys.push(ys[i]);
+    }
+    return out;
+  }
+
+  async function walkableLoaded(z: number, xs: number[], ys: number[]): Promise<{ xs: number[]; ys: number[] }> {
+    if (xs.length === 0) return { xs, ys };
+    let minX = xs[0];
+    let minY = ys[0];
+    let maxX = xs[0];
+    let maxY = ys[0];
+    for (let i = 1; i < xs.length; i++) {
+      minX = Math.min(minX, xs[i]);
+      maxX = Math.max(maxX, xs[i]);
+      minY = Math.min(minY, ys[i]);
+      maxY = Math.max(maxY, ys[i]);
+    }
+    const grid = await readWalkableMask(inputs.current.map.id, z, minX, minY, maxX, maxY, inputs.current.items);
+    const out = { xs: [] as number[], ys: [] as number[] };
+    for (let i = 0; i < xs.length; i++) {
+      if (!grid.mask[ys[i] - minY][xs[i] - minX]) continue;
+      out.xs.push(xs[i]);
+      out.ys.push(ys[i]);
+    }
+    return out;
   }
 
   function beginCustomZoneStroke(pos: Position, set: boolean): boolean {
@@ -1015,7 +1089,9 @@ export function useMapInteraction(deps: InteractionDeps) {
   function customZonePaintAt(pos: Position) {
     const stroke = customZoneStroke.current;
     if (!stroke || !beginStroke(pos)) return;
-    const { xs, ys } = strokeFootprint(pos);
+    const footprint = strokeFootprint(pos);
+    const { xs, ys } = onlyWalkable(stroke.set) ? walkableCached(pos.z, footprint.xs, footprint.ys) : footprint;
+    if (xs.length === 0) return;
     const next = paintCustomZone(stroke.latest, pos.z, xs, ys, stroke.id, stroke.set, inputs.current.customZoneAllFloors);
     if (!next) return;
     stroke.latest = next;
@@ -1041,30 +1117,33 @@ export function useMapInteraction(deps: InteractionDeps) {
     emit(`Zone ${next} selected`);
   }
 
-  function customZonePaintBox(bs: BoxSelection, set: boolean) {
+  async function customZonePaintBox(bs: BoxSelection, set: boolean) {
     const id = inputs.current.activeCustomZoneId;
     if (id == null) {
       emit('Select a zone first');
       return;
     }
+    const box = boxTiles(bs);
+    const { xs, ys } = onlyWalkable(set) ? await walkableLoaded(bs.startTile.z, box.xs, box.ys) : box;
     const before = inputs.current.customZones ?? emptyMapCustomZones();
-    const { xs, ys } = boxTiles(bs);
     const next = paintCustomZone(before, bs.startTile.z, xs, ys, id, set, inputs.current.customZoneAllFloors);
     if (!next) return;
     inputs.current.onEditCustomZones(next);
     pushCustomZoneUndo(before, next);
   }
 
-  function applyCustomZoneTiles(id: number, z: number, xs: number[], ys: number[], set: boolean) {
+  async function applyCustomZoneTiles(id: number, z: number, allXs: number[], allYs: number[], set: boolean) {
+    const { xs, ys } = onlyWalkable(set) ? await walkableLoaded(z, allXs, allYs) : { xs: allXs, ys: allYs };
     const before = inputs.current.customZones ?? emptyMapCustomZones();
-    const next = paintCustomZone(before, z, xs, ys, id, set, inputs.current.customZoneAllFloors);
+    const next = xs.length ? paintCustomZone(before, z, xs, ys, id, set, inputs.current.customZoneAllFloors) : null;
     if (!next) {
-      emit('Nothing changed');
+      emit(onlyWalkable(set) ? 'No walkable tiles to add' : 'Nothing changed');
       return;
     }
     inputs.current.onEditCustomZones(next);
     pushCustomZoneUndo(before, next);
-    emit(`${set ? 'Filled' : 'Erased'} ${xs.length} tiles`);
+    const skipped = allXs.length - xs.length;
+    emit(`${set ? 'Filled' : 'Erased'} ${xs.length} tiles${skipped > 0 ? `, skipped ${skipped} not walkable` : ''}`);
   }
 
   async function customZoneFill(pos: Position, set: boolean) {
@@ -1080,7 +1159,7 @@ export function useMapInteraction(deps: InteractionDeps) {
         emit('This zone is not on this tile');
         return;
       }
-      applyCustomZoneTiles(id, pos.z, xs, ys, false);
+      await applyCustomZoneTiles(id, pos.z, xs, ys, false);
       return;
     }
     const own = customZoneTilesOnFloor(zones, id, pos.z);
@@ -1097,7 +1176,7 @@ export function useMapInteraction(deps: InteractionDeps) {
       emit('Click a walkable tile that is not in this zone yet');
       return;
     }
-    applyCustomZoneTiles(
+    await applyCustomZoneTiles(
       id,
       pos.z,
       cells.map((c) => c.x),
@@ -1140,7 +1219,7 @@ export function useMapInteraction(deps: InteractionDeps) {
       return;
     }
     scene.customZonePolygon.current = null;
-    applyCustomZoneTiles(id, polygon.z, tiles.xs, tiles.ys, set);
+    void applyCustomZoneTiles(id, polygon.z, tiles.xs, tiles.ys, set);
   }
 
   function setHouseExit(pos: Position) {
@@ -1755,27 +1834,150 @@ export function useMapInteraction(deps: InteractionDeps) {
     }
   }
 
+  function routeRender(s: HuntSession): HuntRouteRender {
+    const toWorld = (p: { x: number; y: number }) => ({ x: p.x + s.minX, y: p.y + s.minY });
+    if (s.mode === 'rotation') {
+      const loops = buildLoops(s.mask, s.nodes);
+      s.loops = loops.map((l) => l.path);
+      return { nodes: s.nodes.map(toWorld), paths: s.loops.map((path) => [...path, path[0]].map(toWorld)) };
+    }
+    s.loops = [];
+    const route = connectRoute(s.mask, s.nodes);
+    return { nodes: route.nodes.map(toWorld), paths: route.edges.map((e) => e.path.map(toWorld)) };
+  }
+
   function rebuildHuntRoute(): HuntMeta | null {
     const s = scene.huntSession.current;
     if (!s) return null;
-    const route = connectRoute(s.mask, s.nodes);
-    const toWorld = (p: { x: number; y: number }) => ({ x: p.x + s.minX, y: p.y + s.minY });
-    scene.huntRoute.current = { nodes: route.nodes.map(toWorld), paths: route.edges.map((e) => e.path.map(toWorld)) };
-    const meta: HuntMeta = { points: route.nodes.length, steps: route.totalSteps };
+    s.route = routeRender(s);
+    scene.huntRoute.current = s.route;
+    const meta = huntMetaAll();
     inputs.current.onHuntMeta(meta);
     return meta;
   }
 
-  async function huntPreview(params: HuntPreviewParams): Promise<HuntMeta | null> {
-    const { minX, minY, maxX, maxY, z } = params.area;
-    if (maxX < minX || maxY < minY) {
-      emit('Select a hunt area first');
-      return null;
+  function huntFloorsList(): HuntSession[] {
+    if (scene.huntFloors.current.length) return scene.huntFloors.current;
+    return scene.huntSession.current ? [scene.huntSession.current] : [];
+  }
+
+  function huntMetaAll(): HuntMeta {
+    const meta: HuntMeta = { points: 0, steps: 0, short: 0, monsters: 0, isolated: 0, walkable: 0, floors: [], lures: 0 };
+    for (const s of huntFloorsList()) {
+      const points = s.route?.nodes.length ?? 0;
+      const groups = s.mode === 'rotation' ? s.lures : points;
+      const perBox = new Array(groups).fill(0);
+      for (const t of s.monsterTiles) if (t.box < groups) perBox[t.box]++;
+      if (s.mode === 'box') meta.short += perBox.filter((c) => c < s.boxSize).length;
+      if (s.mode === 'rotation') meta.short += perBox.filter((c, i) => c < (s.lureTargets[i] ?? 0)).length;
+      meta.points += points;
+      meta.lures += s.mode === 'rotation' ? s.lures : 0;
+      meta.steps += s.route ? s.route.paths.reduce((sum, p) => sum + Math.max(0, p.length - 1), 0) : 0;
+      meta.monsters += s.monsterTiles.length;
+      meta.isolated += s.isolated;
+      for (const row of s.mask) for (const cell of row) if (cell) meta.walkable++;
+      if (points > 0) meta.floors.push(s.z);
     }
-    const grid = await readWalkableMask(inputs.current.map.id, z, minX, minY, maxX, maxY, inputs.current.items);
-    const seeded = buildRoute(grid.mask, spreadPoints(grid.mask, params.viewW, params.viewH));
-    const mask = seeded.nodes.length > 0 ? reachableFrom(grid.mask, seeded.nodes[0]) : grid.mask;
-    scene.huntSession.current = {
+    return meta;
+  }
+
+  function huntRoster(): number[] {
+    return interleaveCounts(inputs.current.huntMonsters.map((m) => m.count));
+  }
+
+  function huntZoneArea(zoneId: number, z: number): HuntArea | null {
+    const zones = inputs.current.huntZones;
+    if (!zones) return null;
+    const { xs, ys } = customZoneTilesOnFloor(zones, zoneId, z);
+    if (xs.length === 0) return null;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (let i = 0; i < xs.length; i++) {
+      minX = Math.min(minX, xs[i]);
+      maxX = Math.max(maxX, xs[i]);
+      minY = Math.min(minY, ys[i]);
+      maxY = Math.max(maxY, ys[i]);
+    }
+    return { minX, minY, maxX, maxY, z };
+  }
+
+  function huntZoneFloors(zoneId: number): number[] {
+    const zones = inputs.current.huntZones;
+    const zone = zones?.list.find((item) => item.id === zoneId);
+    if (!zones || !zone) return [];
+    const floors: number[] = [];
+    for (let z = zone.minZ; z <= zone.maxZ; z++) if (customZoneTilesOnFloor(zones, zoneId, z).xs.length) floors.push(z);
+    return floors;
+  }
+
+  function trimHuntZone(zoneId: number, trims: { z: number; xs: number[]; ys: number[] }[]) {
+    const before = inputs.current.huntZones;
+    if (!before) return;
+    let next = before;
+    for (const t of trims) {
+      if (!t.xs.length) continue;
+      next = paintCustomZone(next, t.z, t.xs, t.ys, zoneId, false, false) ?? next;
+    }
+    if (next === before) return;
+    inputs.current.onEditZoneLayer('hunt', next);
+    void pushUndoSidecar(
+      inputs.current.map.id,
+      JSON.stringify({ huntZones: toCustomZoneFile(before) } satisfies Sidecar),
+      JSON.stringify({ huntZones: toCustomZoneFile(next) } satisfies Sidecar)
+    );
+  }
+
+  async function buildHuntFloor(
+    params: HuntPreviewParams,
+    area: HuntArea,
+    trims: { z: number; xs: number[]; ys: number[] }[]
+  ): Promise<HuntSession> {
+    const zoneId = params.zoneId;
+    const { minX, minY, maxX, maxY, z } = area;
+    const grid = await readWalkableMask(
+      inputs.current.map.id,
+      z,
+      minX,
+      minY,
+      maxX,
+      maxY,
+      inputs.current.items,
+      inputs.current.floorChangeIds
+    );
+    let isolated = 0;
+    if (zoneId != null) {
+      const walk = grid.mask.map((row) => [...row]);
+      const blocked = { z, xs: [] as number[], ys: [] as number[] };
+      for (let y = minY; y <= maxY; y++) {
+        for (let x = minX; x <= maxX; x++) {
+          const inZone = customZoneIdsAt(inputs.current.huntZones, x, y, z).includes(zoneId);
+          if (inZone && !walk[y - minY][x - minX]) {
+            blocked.xs.push(x);
+            blocked.ys.push(y);
+          }
+          if (!inZone) grid.mask[y - minY][x - minX] = false;
+        }
+      }
+      trims.push(blocked);
+      const main = keepMainAreas(walk, grid.mask, params.viewW * params.viewH, grid.stairs);
+      grid.mask = main.mask;
+      isolated = main.dropped;
+    }
+    const spread = spreadPoints(grid.mask, params.viewW, params.viewH);
+    const seeded = zoneId != null ? connectRoute(grid.mask, nodePerArea(grid.mask, spread)) : buildRoute(grid.mask, spread);
+    const mask = zoneId == null && seeded.nodes.length > 0 ? reachableFrom(grid.mask, seeded.nodes[0]) : grid.mask;
+    const s: HuntSession = {
+      z,
+      route: null,
+      zoneId,
+      mode: params.mode,
+      isolated,
+      lureLength: params.lureLength,
+      loops: [],
+      lures: 0,
+      lureTargets: [],
       mask,
       minX: grid.minX,
       minY: grid.minY,
@@ -1786,86 +1988,178 @@ export function useMapInteraction(deps: InteractionDeps) {
       nodes: seeded.nodes,
       monsterTiles: []
     };
-    scene.huntRouteZ.current = z;
-    const meta = rebuildHuntRoute();
-    rescatterHunt();
-    if (!meta || meta.points === 0) emit('No walkable tiles in the selected area');
-    else emit(`Hunt route: ${meta.points} box${meta.points === 1 ? '' : 'es'}`);
+    s.route = routeRender(s);
+    return s;
+  }
+
+  function setActiveHuntFloor(s: HuntSession) {
+    scene.huntSession.current = s;
+    scene.huntRoute.current = s.route;
+    scene.huntRouteZ.current = s.z;
+    scene.huntSelected.current = null;
+  }
+
+  function syncHuntFloor(z: number) {
+    const s = scene.huntFloors.current.find((f) => f.z === z);
+    if (s && s !== scene.huntSession.current) setActiveHuntFloor(s);
+  }
+
+  async function huntPreview(params: HuntPreviewParams): Promise<HuntMeta | null> {
+    const zoneId = params.zoneId;
+    const floors = zoneId != null ? huntZoneFloors(zoneId) : params.area ? [params.area.z] : [];
+    if (!floors.length) {
+      emit(zoneId != null ? `Hunt zone ${zoneId} has no tiles yet` : 'Select a hunt area first');
+      return null;
+    }
+    const sessions: HuntSession[] = [];
+    const trims: { z: number; xs: number[]; ys: number[] }[] = [];
+    for (const z of floors) {
+      const area = zoneId != null ? huntZoneArea(zoneId, z) : params.area;
+      if (area && area.maxX >= area.minX && area.maxY >= area.minY) sessions.push(await buildHuntFloor(params, area, trims));
+    }
+    if (zoneId != null) trimHuntZone(zoneId, trims);
+    scene.huntFloors.current = sessions;
+    const active = sessions.find((s) => s.z === inputs.current.floorZ) ?? sessions[0];
+    if (!active) return null;
+    setActiveHuntFloor(active);
+    const meta = rescatterHunt();
+    if (!meta || meta.points === 0) {
+      emit('No walkable tiles in the selected area');
+      return meta;
+    }
+    const skipped = meta.isolated > 0 ? `, ignored ${plural(meta.isolated, 'unreachable pocket')}` : '';
+    const where = meta.floors.length > 1 ? ` on floors ${meta.floors.join(', ')}` : '';
+    emit(`Hunt route: ${meta.points} box${meta.points === 1 ? '' : 'es'}${where}, ${plural(meta.monsters, 'monster')}${skipped}`);
     return meta;
   }
 
-  function rescatterHunt(boxSize?: number, viewW?: number, viewH?: number) {
-    const s = scene.huntSession.current;
-    const route = scene.huntRoute.current;
-    if (!s || !route) return;
-    s.boxSize = boxSize ?? s.boxSize;
-    s.viewW = viewW ?? s.viewW;
-    s.viewH = viewH ?? s.viewH;
-    const cover: { x: number; y: number }[] = [];
-    for (const n of route.nodes) cover.push({ x: n.x - s.minX, y: n.y - s.minY });
+  function scatterHuntFloor(s: HuntSession) {
+    const route = s.route;
+    if (!route) return;
+    const halfW = Math.floor(s.viewW / 2);
+    const halfH = Math.floor(s.viewH / 2);
+    const nodes = route.nodes.map((n) => ({ x: n.x - s.minX, y: n.y - s.minY }));
+    const spacing = createSpacing(s.mask);
+    if (s.mode === 'rotation') {
+      s.monsterTiles = [];
+      s.lures = 0;
+      s.lureTargets = [];
+      for (const loop of s.loops) {
+        const r = fillRotation(s.mask, loop, s.boxSize, s.lureLength, halfW, halfH, Math.random, s.lures, spacing);
+        s.monsterTiles.push(...r.tiles);
+        s.lureTargets.push(...r.targets);
+        s.lures += r.lures;
+      }
+      return;
+    }
+    if (s.mode === 'box') {
+      s.monsterTiles = fillBoxes(s.mask, nodes, s.boxSize, halfW, halfH, Math.random, spacing);
+      return;
+    }
+    const cover: { x: number; y: number }[] = [...nodes];
     for (const path of route.paths) for (const p of path) cover.push({ x: p.x - s.minX, y: p.y - s.minY });
-    const eligible = coverageMask(s.mask, cover, Math.floor(s.viewW / 2), Math.floor(s.viewH / 2));
-    let walkableCount = 0;
-    for (const row of eligible) for (const cell of row) if (cell) walkableCount++;
-    const monsterCount = Math.round((walkableCount * s.boxSize) / (s.viewW * s.viewH));
-    s.monsterTiles = scatterPoints(eligible, monsterCount, Math.random);
+    const eligible = coverageMask(s.mask, cover, halfW, halfH);
+    let walkable = 0;
+    for (const row of eligible) for (const cell of row) if (cell) walkable++;
+    const count = Math.round((walkable * s.boxSize) / (s.viewW * s.viewH));
+    s.monsterTiles = scatterPoints(eligible, count, Math.random, spacing).map((p) => ({ ...p, box: 0 }));
+  }
+
+  function rescatterHunt(params?: Partial<HuntRescatterParams>, activeOnly = false): HuntMeta | null {
+    const active = scene.huntSession.current;
+    const targets = activeOnly ? (active ? [active] : []) : huntFloorsList();
+    if (!targets.length) return null;
+    for (const s of targets) {
+      const previousMode = s.mode;
+      s.boxSize = params?.boxSize ?? s.boxSize;
+      s.viewW = params?.viewW ?? s.viewW;
+      s.viewH = params?.viewH ?? s.viewH;
+      s.lureLength = params?.lureLength ?? s.lureLength;
+      s.mode = params?.mode ?? s.mode;
+      if ((s.mode === 'rotation') !== (previousMode === 'rotation')) {
+        s.route = routeRender(s);
+        if (s === active) scene.huntRoute.current = s.route;
+      }
+      scatterHuntFloor(s);
+    }
+    const meta = huntMetaAll();
+    inputs.current.onHuntMeta(meta);
+    return meta;
   }
 
   function generateHunt() {
-    const s = scene.huntSession.current;
+    const floors = huntFloorsList();
     const monsters = inputs.current.huntMonsters;
-    if (!s) {
+    if (!floors.length) {
       emit('Preview a hunt first');
       return;
     }
-    if (monsters.length === 0) {
+    if (monsters.length === 0 || monsters.every((m) => m.count <= 0)) {
       emit('Select at least one monster');
       return;
     }
-    if (s.monsterTiles.length === 0) {
+    if (floors.every((s) => s.monsterTiles.length === 0)) {
       emit('Nothing to generate');
       return;
     }
-    const z = scene.huntRouteZ.current;
     const base = inputs.current.spawns ?? emptyMapSpawns();
-    const areas = [...base.areas];
-    const placements = [...base.placements];
-    const occupied = new Set(base.placements.map((p) => `${p.x},${p.y},${p.z}`));
+    const zoneId = floors[0].zoneId;
+    const floorSet = new Set(floors.map((s) => s.z));
+    const inZone = (x: number, y: number, pz: number) =>
+      zoneId != null && floorSet.has(pz) && customZoneIdsAt(inputs.current.huntZones, x, y, pz).includes(zoneId);
+    const placements = base.placements.filter((p) => p.isNpc || !inZone(p.x, p.y, p.z));
+    const removed = base.placements.length - placements.length;
+    const areas = base.areas.filter(
+      (a) =>
+        !inZone(a.x, a.y, a.z) ||
+        placements.some((p) => p.z === a.z && Math.abs(p.x - a.x) <= a.radius && Math.abs(p.y - a.y) <= a.radius)
+    );
+    const occupied = new Set(placements.map((p) => `${p.x},${p.y},${p.z}`));
+    const roster = huntRoster();
     let added = 0;
-    s.monsterTiles.forEach((t, i) => {
-      const x = t.x + s.minX;
-      const y = t.y + s.minY;
-      if (occupied.has(`${x},${y},${z}`)) return;
-      occupied.add(`${x},${y},${z}`);
-      const m = monsters[i % monsters.length];
-      areas.push({ x, y, z, radius: 1 });
-      placements.push({
-        x,
-        y,
-        z,
-        name: m.name,
-        isNpc: false,
-        lookType: m.lookType,
-        head: m.head,
-        body: m.body,
-        legs: m.legs,
-        feet: m.feet,
-        spawntime: m.spawntime,
-        direction: 2
-      });
-      added++;
-    });
+    for (const s of floors) {
+      const z = s.z;
+      const slot = new Map<number, number>();
+      for (const t of s.monsterTiles) {
+        const x = t.x + s.minX;
+        const y = t.y + s.minY;
+        const j = slot.get(t.box) ?? 0;
+        slot.set(t.box, j + 1);
+        if (occupied.has(`${x},${y},${z}`)) continue;
+        occupied.add(`${x},${y},${z}`);
+        const m = monsters[roster[j % roster.length]];
+        areas.push({ x, y, z, radius: HUNT_SPAWN_RADIUS });
+        placements.push({
+          x,
+          y,
+          z,
+          name: m.name,
+          isNpc: false,
+          lookType: m.lookType,
+          head: m.head,
+          body: m.body,
+          legs: m.legs,
+          feet: m.feet,
+          spawntime: m.spawntime,
+          direction: 2
+        });
+        added++;
+      }
+    }
     editSpawns(buildMapSpawns(areas, placements));
     clearHuntPreview();
     scene.huntArea.current = null;
     inputs.current.onHuntArea(null);
     inputs.current.onHuntMeta(null);
-    emit(`Generated ${added} spawn${added === 1 ? '' : 's'}`);
+    const where = floorSet.size > 1 ? ` on floors ${[...floorSet].join(', ')}` : '';
+    const replaced = removed > 0 ? `, replaced ${removed} in zone ${zoneId}` : '';
+    emit(`Generated ${added} spawn${added === 1 ? '' : 's'}${where}${replaced}`);
   }
 
   function clearHuntPreview() {
     scene.huntRoute.current = null;
     scene.huntSession.current = null;
+    scene.huntFloors.current = [];
     scene.huntSelected.current = null;
   }
 
@@ -2310,7 +2604,7 @@ export function useMapInteraction(deps: InteractionDeps) {
           scene.huntSelected.current = idx;
           scene.huntDrag.current = { index: idx, moved: false };
           rebuildHuntRoute();
-          rescatterHunt();
+          rescatterHunt(undefined, true);
         }
         return;
       }
@@ -2422,7 +2716,8 @@ export function useMapInteraction(deps: InteractionDeps) {
       return;
     }
     if (tool === 'brush' && brush && brush.kind === 'creature') {
-      beginCreatureStroke(e);
+      if (e.ctrlKey) beginMarkerEraseStroke(e, true);
+      else beginCreatureStroke(e);
       return;
     }
     if (tool === 'spawn') {
@@ -2564,7 +2859,7 @@ export function useMapInteraction(deps: InteractionDeps) {
     if (scene.huntDrag.current) {
       const moved = scene.huntDrag.current.moved;
       scene.huntDrag.current = null;
-      if (moved) rescatterHunt();
+      if (moved) rescatterHunt(undefined, true);
       return;
     }
     if (scene.huntAreaDrag.current) {
@@ -2602,7 +2897,7 @@ export function useMapInteraction(deps: InteractionDeps) {
       } else if (tool === 'house') {
         housePaintBox(bs, !bs.additive);
       } else if (tool === 'custom_zone') {
-        customZonePaintBox(bs, !bs.additive);
+        void customZonePaintBox(bs, !bs.additive);
       } else {
         const boxes = selectionFloorBoxes(
           bs.startTile.z,
@@ -2667,7 +2962,7 @@ export function useMapInteraction(deps: InteractionDeps) {
         scene.huntSelected.current = null;
         scene.huntDrag.current = null;
         rebuildHuntRoute();
-        rescatterHunt();
+        rescatterHunt(undefined, true);
         emit(`Removed box - ${s.nodes.length} left`);
         return;
       }
@@ -2962,6 +3257,7 @@ export function useMapInteraction(deps: InteractionDeps) {
     generate,
     huntPreview,
     rescatterHunt,
+    syncHuntFloor,
     generateHunt,
     clearHunt,
     clearHuntPreview,

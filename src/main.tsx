@@ -14,7 +14,7 @@ import MapTowns from '~/components/MapTowns';
 import IdMarkers from '~/components/IdMarkers';
 import MapCanvas from '~/components/MapCanvas';
 import Workspace from '~/components/Workspace';
-import { openDataDir } from '~/adapter/assets';
+import { openDataDir, loadFloorChangeIds } from '~/adapter/assets';
 import { LoadedSprite } from '~/domain/sprite';
 import { loadSprites } from '~/adapter/sprites';
 import { hasSidecars } from '~/lib/map/sidecars';
@@ -64,10 +64,11 @@ import { TooltipProvider } from '~/components/commons/ui/tooltip';
 import ItemPropertiesPanel from '~/components/ItemPropertiesPanel';
 import { useAutoSave } from '~/usecase/hooks/Workspace/useAutoSave';
 import { useTool, ToolProvider } from '~/usecase/context/ToolContext';
+import { ZoneLayer } from '~/usecase/context/ToolContext/types';
 import { useMapSpawns } from '~/usecase/hooks/Workspace/useMapSpawns';
 import { useMapHouses } from '~/usecase/hooks/Workspace/useMapHouses';
 import { addWaypoint, nextWaypointName } from '~/usecase/waypointEdits';
-import { saveCustomZones, customZonesPath } from '~/adapter/customZones';
+import { huntZonesPath, saveCustomZones, customZonesPath } from '~/adapter/customZones';
 import { useMapCreatures } from '~/usecase/hooks/Workspace/useMapCreatures';
 import { useMapWaypoints } from '~/usecase/hooks/Workspace/useMapWaypoints';
 import { useAppShortcuts } from '~/usecase/hooks/Workspace/useAppShortcuts';
@@ -236,7 +237,7 @@ const App = () => {
     autoSave,
     autoSaveDelay
   } = useEditorSettings();
-  const { setPaletteCategory, referenceImage, patchReferenceImage, selectBrush } = useTool();
+  const { setPaletteCategory, referenceImage, patchReferenceImage, selectBrush, zoneLayer } = useTool();
 
   const cycleReference = () => {
     if (!referenceImage) return;
@@ -305,6 +306,8 @@ const App = () => {
   const housesDirty = React.useRef(false);
   const customZonesRef = React.useRef<MapCustomZones | null>(null);
   const customZonesDirty = React.useRef(false);
+  const huntZonesRef = React.useRef<MapCustomZones | null>(null);
+  const huntZonesDirty = React.useRef(false);
   const activeIdRef = React.useRef<string | null>(null);
   const [dirtyIds, setDirtyIds] = React.useState<Set<string>>(new Set());
   const dirtyTabs = React.useRef(dirtyIds);
@@ -384,6 +387,12 @@ const App = () => {
     customZonesDirty.current = false;
   }, []);
 
+  const persistHuntZones = React.useCallback(async (path: string) => {
+    if (!huntZonesDirty.current || !huntZonesRef.current) return;
+    await saveCustomZones(huntZonesPath(path), huntZonesRef.current);
+    huntZonesDirty.current = false;
+  }, []);
+
   const pushModelSidecars = React.useCallback(
     async (mapId: number, path: string) => {
       if (hasSidecars(path)) {
@@ -403,14 +412,16 @@ const App = () => {
         await persistWaypoints(path);
         await persistHouses(mapId, path);
         await persistCustomZones(path);
+        await persistHuntZones(path);
       }
       spawnsDirty.current = false;
       housesDirty.current = false;
       waypointsDirty.current = false;
       customZonesDirty.current = false;
+      huntZonesDirty.current = false;
       if (activeIdRef.current) clearDirty(activeIdRef.current);
     },
-    [persistSpawns, persistWaypoints, persistHouses, persistCustomZones, clearDirty]
+    [persistSpawns, persistWaypoints, persistHouses, persistCustomZones, persistHuntZones, clearDirty]
   );
 
   const {
@@ -576,6 +587,44 @@ const App = () => {
     },
     [setCustomZones, markActiveDirty]
   );
+
+  const { customZones: huntZones, setCustomZones: setHuntZones } = useMapCustomZones(
+    active ? { id: active.id, path: active.path } : null,
+    huntZonesPath
+  );
+  huntZonesRef.current = huntZones;
+
+  const [floorChangeIds, setFloorChangeIds] = React.useState<Set<number>>(() => new Set());
+  React.useEffect(() => {
+    if (!active?.path) {
+      setFloorChangeIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    void loadFloorChangeIds(active.path).then((ids) => {
+      if (!cancelled) setFloorChangeIds(ids);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [active?.path]);
+
+  const handleEditHuntZones = React.useCallback(
+    (next: MapCustomZones) => {
+      huntZonesRef.current = next;
+      setHuntZones(next);
+      huntZonesDirty.current = true;
+      markActiveDirty();
+    },
+    [setHuntZones, markActiveDirty]
+  );
+
+  const handleEditZoneLayer = React.useCallback(
+    (layer: ZoneLayer, next: MapCustomZones) => (layer === 'hunt' ? handleEditHuntZones : handleEditCustomZones)(next),
+    [handleEditHuntZones, handleEditCustomZones]
+  );
+  const layerZones = zoneLayer === 'hunt' ? huntZones : customZones;
+  const handleEditLayerZones = zoneLayer === 'hunt' ? handleEditHuntZones : handleEditCustomZones;
 
   const commitImport = React.useCallback(
     async (opts: {
@@ -974,6 +1023,7 @@ const App = () => {
     waypointsDirty.current = false;
     housesDirty.current = false;
     customZonesDirty.current = false;
+    huntZonesDirty.current = false;
     setPlacingWaypoint(null);
   }, [activeId]);
 
@@ -1004,14 +1054,16 @@ const App = () => {
           dragHandle={handle}
           waypoints={waypoints}
           onGotoHouse={gotoHouse}
-          customZones={customZones}
+          customZones={layerZones}
+          huntZones={huntZones}
           onGotoWaypoint={gotoWaypoint}
           onEditWaypoints={editWaypoints}
           onEditHouses={handleEditHouses}
           onAddWaypoint={addWaypointAtCenter}
           creatureTilesets={creatureTilesets}
           onPickCreatureDir={pickCreatureDir}
-          onEditCustomZones={handleEditCustomZones}
+          onEditCustomZones={handleEditLayerZones}
+          onEditHuntZones={handleEditHuntZones}
           creatureNeedsPicker={creatureNeedsPicker}
           onCopyWaypointPosition={copyWaypointPosition}
           onClose={isPrimary ? undefined : () => dock.closePanel(id)}
@@ -1272,7 +1324,9 @@ const App = () => {
             centerRef={mapCenterRef}
             importGhost={importGhost}
             onFloorChange={setFloorZ}
-            customZones={customZones}
+            customZones={layerZones}
+            huntZones={huntZones}
+            floorChangeIds={floorChangeIds}
             refetchRef={mapRefetchRef}
             stackPickRef={stackPickRef}
             initialCenter={active.center}
@@ -1287,7 +1341,8 @@ const App = () => {
             onItemProperties={openProperties}
             onImportCancel={handleImportCancel}
             onEditWaypoints={handleEditWaypoints}
-            onEditCustomZones={handleEditCustomZones}
+            onEditCustomZones={handleEditLayerZones}
+            onEditZoneLayer={handleEditZoneLayer}
             onPlaceWaypoint={() => setPlacingWaypoint(null)}
             onEdit={(z) => {
               minimapApiRef.current?.markDirty(z);

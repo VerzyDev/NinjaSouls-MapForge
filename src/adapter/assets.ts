@@ -132,6 +132,28 @@ export async function loadItemCaps(serverIds: number[]): Promise<ItemCaps[]> {
   return invoke<ItemCaps[]>('item_caps', { serverIds });
 }
 
+export async function loadFloorChangeIds(mapPath: string): Promise<Set<number>> {
+  const ids = new Set<number>();
+  const dir = mapPath.replace(/[^\\/]+$/, '');
+  let content: string;
+  try {
+    content = await invoke<string>('read_file_text', { path: `${dir}../items/items.json` });
+  } catch {
+    return ids;
+  }
+  try {
+    const file = JSON.parse(content) as { items?: { id?: number; fromid?: number; toid?: number; floorchange?: unknown }[] };
+    for (const item of file.items ?? []) {
+      if (!item.floorchange) continue;
+      if (item.id != null) ids.add(item.id);
+      if (item.fromid != null && item.toid != null) for (let id = item.fromid; id <= item.toid; id++) ids.add(id);
+    }
+  } catch {
+    return ids;
+  }
+  return ids;
+}
+
 export async function loadItemTypes(dir: string): Promise<Map<number, string>> {
   const types = new Map<number, string>();
   let content: string;

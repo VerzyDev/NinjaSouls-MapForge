@@ -10,6 +10,8 @@ export const customZonesPath = (mapPath: string): string => {
   return `${dir}${stem}-zones/${CUSTOM_ZONES_FILE}`;
 };
 
+export const huntZonesPath = (mapPath: string): string => `${mapPath.replace(/\.otbm$/i, '')}-hunts.json`;
+
 export async function loadCustomZones(path: string): Promise<MapCustomZones> {
   let content: string;
   try {

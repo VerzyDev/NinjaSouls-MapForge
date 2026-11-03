@@ -5,7 +5,7 @@ import { Plus, Trash2, Pencil, CircleSlash2 } from 'lucide-react';
 import { cn } from '~/usecase/classNames';
 import { Hint } from '~/components/commons/ui/tooltip';
 import { useTool } from '~/usecase/context/ToolContext';
-import { CustomZoneMode } from '~/usecase/context/ToolContext/types';
+import { ZoneLayer, CustomZoneMode } from '~/usecase/context/ToolContext/types';
 import {
   CustomZone,
   MapCustomZones,
@@ -41,12 +41,19 @@ const CUSTOM_ZONE_MODES: { mode: CustomZoneMode; label: string; help: string }[]
   }
 ];
 
+const ZONE_LAYERS: { layer: ZoneLayer; label: string; help: string }[] = [
+  { layer: 'server', label: 'Server', help: 'Server zones: saved in the map zones folder and loaded by the server.' },
+  { layer: 'hunt', label: 'Hunt', help: 'Hunt zones: editor only, saved next to the map and never loaded by the server. Used by Generator - Hunt.' }
+];
+
 const ZonesList = ({ zones, onEdit }: ZonesListProps) => {
   const {
     activeTool,
     activeCustomZoneId,
     customZoneAllFloors,
     customZoneMode,
+    zoneLayer,
+    setZoneLayer,
     setActiveTool,
     setActiveCustomZone,
     setCustomZoneAllFloors,
@@ -92,6 +99,23 @@ const ZonesList = ({ zones, onEdit }: ZonesListProps) => {
   return (
     <div className="flex h-full flex-col">
       <div className="flex flex-shrink-0 flex-col gap-1.5 border-b border-border/50 p-2">
+        <div className="flex gap-1">
+          {ZONE_LAYERS.map((option) => (
+            <Hint key={option.layer} label={option.help}>
+              <button
+                onClick={() => setZoneLayer(option.layer)}
+                className={cn(
+                  'flex-1 rounded px-1.5 py-0.5 text-[10px]',
+                  zoneLayer === option.layer
+                    ? 'bg-primary/20 text-foreground'
+                    : 'text-muted-foreground hover:bg-item-hover hover:text-foreground'
+                )}
+              >
+                {option.label}
+              </button>
+            </Hint>
+          ))}
+        </div>
         <PaletteSearch value={query} onChange={setQuery} placeholder="Search zones...">
           {activeCustomZoneId != null && (
             <Hint label="Deselect zone">
