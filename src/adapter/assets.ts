@@ -142,9 +142,12 @@ export async function loadFloorChangeIds(mapPath: string): Promise<Set<number>> 
     return ids;
   }
   try {
-    const file = JSON.parse(content) as { items?: { id?: number; fromid?: number; toid?: number; floorchange?: unknown }[] };
+    const file = JSON.parse(content) as {
+      items?: { id?: number; fromid?: number; toid?: number; name?: string; floorchange?: unknown }[];
+    };
     for (const item of file.items ?? []) {
-      if (!item.floorchange) continue;
+      // Ladders change floor through action scripts, so items.json has no floorchange for them.
+      if (!item.floorchange && !item.name?.toLowerCase().includes('ladder')) continue;
       if (item.id != null) ids.add(item.id);
       if (item.fromid != null && item.toid != null) for (let id = item.fromid; id <= item.toid; id++) ids.add(id);
     }

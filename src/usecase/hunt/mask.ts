@@ -13,12 +13,18 @@ export interface HuntGrid {
   stairs: Mask;
 }
 
-export function isWalkableTile(ct: ChunkTiles, i: number, items: Map<number, Thing>): boolean {
+export function isWalkableTile(
+  ct: ChunkTiles,
+  i: number,
+  items: Map<number, Thing>,
+  floorChange?: Set<number>
+): boolean {
   let hasGround = false;
   for (let s = ct.itemOffset[i]; s < ct.itemOffset[i + 1]; s++) {
+    if (floorChange?.has(ct.serverIds[s])) return false;
     const thing = items.get(ct.clientIds[s]);
     if (!thing) continue;
-    if (thing.isUnpassable) return false;
+    if (thing.isUnpassable || thing.blockPathfind || thing.floorChange) return false;
     if (thing.isGround) hasGround = true;
   }
   return hasGround;
@@ -53,7 +59,7 @@ export async function readWalkableMask(
       const x = ct.tileX[i];
       const y = ct.tileY[i];
       if (x < minX || x > maxX || y < minY || y > maxY) continue;
-      if (isWalkableTile(ct, i, items)) mask[y - minY][x - minX] = true;
+      if (isWalkableTile(ct, i, items, floorChange)) mask[y - minY][x - minX] = true;
       if (!floorChange?.size) continue;
       for (let s = ct.itemOffset[i]; s < ct.itemOffset[i + 1]; s++) {
         if (floorChange.has(ct.serverIds[s])) {

@@ -27,6 +27,8 @@ export interface Thing {
   stackable: boolean;
   hangable: boolean;
   isUnpassable: boolean;
+  blockPathfind?: boolean;
+  floorChange?: boolean;
   miniMap: boolean;
   miniMapColor: number;
   category: ThingCategory;
