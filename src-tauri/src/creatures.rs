@@ -281,10 +281,64 @@ fn scan_lua_monsters(monster_dir: &Path) -> Vec<CreatureEntry> {
 		.collect()
 }
 
+const SERVER_GLOBALS_STUB: &str = r#"
+local function stub(path)
+	return setmetatable({}, {
+		__index = function(_, key) return stub(path .. "." .. tostring(key)) end,
+		__call = function() return stub(path .. "()") end,
+		__tostring = function() return path end,
+	})
+end
+setmetatable(_G, { __index = function(_, key) return stub(key) end })
+"#;
+
+fn lua_npc_entries(path: &Path) -> Vec<CreatureEntry> {
+	let Ok(text) = fs::read_to_string(path) else { return Vec::new() };
+	let lua = mlua::Lua::new();
+	let found = std::sync::Arc::new(Mutex::new(Vec::new()));
+	let sink = found.clone();
+	let loaded = (|| -> mlua::Result<()> {
+		let register = lua.create_function(move |_, def: mlua::Table| {
+			let name: String = def.get("name")?;
+			let look: Option<mlua::Table> = def.get("look")?;
+			let number = |key: &str| -> u16 {
+				look.as_ref().and_then(|t| t.get::<Option<u16>>(key).ok().flatten()).unwrap_or(0)
+			};
+			sink.lock().unwrap().push(CreatureEntry {
+				name,
+				is_npc: true,
+				look_type: number("type"),
+				look_item: number("typeEx"),
+				head: number("head"),
+				body: number("body"),
+				legs: number("legs"),
+				feet: number("feet"),
+				addons: number("addons"),
+				mount: number("mount"),
+			});
+			Ok(())
+		})?;
+		let npc_type = lua.create_table()?;
+		npc_type.set("register", register)?;
+		lua.globals().set("NpcType", npc_type)?;
+		lua.load(SERVER_GLOBALS_STUB).exec()?;
+		lua.load(&text).set_name(path.to_string_lossy()).exec()
+	})();
+	if let Err(e) = loaded {
+		eprintln!("[creatures] {}: {}", path.display(), e);
+	}
+	let entries = std::mem::take(&mut *found.lock().unwrap());
+	entries
+}
+
 fn scan_npcs(npc_dir: &Path) -> Vec<CreatureEntry> {
-	let mut files = Vec::new();
-	collect_files(npc_dir, "xml", &mut files);
-	files.par_iter().filter_map(|p| entry_from_file(p, true, None)).collect()
+	let mut xml_files = Vec::new();
+	collect_files(npc_dir, "xml", &mut xml_files);
+	let mut lua_files = Vec::new();
+	collect_files(npc_dir, "lua", &mut lua_files);
+	let mut npcs: Vec<CreatureEntry> = xml_files.par_iter().filter_map(|p| entry_from_file(p, true, None)).collect();
+	npcs.extend(lua_files.par_iter().flat_map_iter(|p| lua_npc_entries(p)).collect::<Vec<_>>());
+	npcs
 }
 
 #[tauri::command]
@@ -370,6 +424,34 @@ monster.outfit = { lookType = 93, lookHead = 94, lookAddons = 2 }
 		let entry = lua_entry_from_file(&file).unwrap();
 		assert_eq!(entry.name, "Blightling");
 		assert_eq!((entry.look_type, entry.head, entry.addons, entry.look_item), (93, 94, 2, 0));
+	}
+
+	#[test]
+	fn lua_npcs_registered_in_a_loop_are_all_listed_by_name() {
+		let root = temp_root("lua-npc");
+		let lua_dir = root.join("lua");
+		fs::create_dir_all(&lua_dir).unwrap();
+		fs::create_dir_all(root.join("scripts")).unwrap();
+		fs::write(root.join("scripts").join("bank.lua"), "NpcType.register({ name = \"Ignored\" })").unwrap();
+		fs::write(
+			lua_dir.join("villagers.lua"),
+			"local list = { { name = \"Medico\", look = 595 }, { name = \"Tsunade Hokage\", displayName = \"Tsunade\", look = 574 } }
+for _, v in ipairs(list) do
+	NpcType.register({ name = v.name, displayName = v.displayName, look = { type = v.look, head = 57 }, speechBubble = SPEECHBUBBLE_QUEST, setup = function() QuestKit.x() end })
+end
+",
+		)
+		.unwrap();
+		fs::write(lua_dir.join("broken.lua"), "NpcType.register({ name = \"Before\", look = { typeEx = 1448 } })\nerror(\"boom\")").unwrap();
+
+		let mut npcs = scan_npcs(&root);
+		npcs.sort_by(|a, b| a.name.cmp(&b.name));
+		let summary: Vec<(&str, u16, u16, u16, bool)> =
+			npcs.iter().map(|n| (n.name.as_str(), n.look_type, n.look_item, n.head, n.is_npc)).collect();
+		assert_eq!(
+			summary,
+			vec![("Before", 0, 1448, 0, true), ("Medico", 595, 0, 57, true), ("Tsunade Hokage", 574, 0, 57, true)]
+		);
 	}
 
 	#[test]
