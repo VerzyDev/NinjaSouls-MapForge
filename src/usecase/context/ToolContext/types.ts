@@ -35,6 +35,8 @@ export interface HuntRescatterParams {
   lureLength: number;
   viewW: number;
   viewH: number;
+  aggroW: number;
+  aggroH: number;
 }
 
 export interface HuntPreviewParams extends HuntRescatterParams {
@@ -51,6 +53,11 @@ export interface HuntRescatterSignal extends HuntRescatterParams {
   nonce: number;
 }
 
+export interface HuntDeleteMonstersSignal {
+  zoneId: number;
+  nonce: number;
+}
+
 export interface HuntMeta {
   points: number;
   steps: number;
@@ -60,6 +67,7 @@ export interface HuntMeta {
   walkable: number;
   floors: number[];
   lures: number;
+  edited: boolean;
 }
 
 export interface HuntViewPreview {
@@ -142,21 +150,27 @@ export interface ToolContextValue {
   huntArea: HuntArea | null;
   huntAreaSelecting: boolean;
   huntEditing: boolean;
+  huntRouteAdding: boolean;
   huntView: HuntViewPreview;
   huntMonsters: HuntMonster[];
+  huntZoneId: number | null | undefined;
   huntRescatterSignal: HuntRescatterSignal | null;
   huntGenerateNonce: number;
   huntClearNonce: number;
+  huntDeleteMonstersSignal: HuntDeleteMonstersSignal | null;
   requestHuntPreview: (params: HuntPreviewParams) => void;
   requestHuntRescatter: (params: Omit<HuntRescatterSignal, 'nonce'>) => void;
   requestHuntGenerate: () => void;
   requestHuntClear: () => void;
+  requestHuntDeleteMonsters: (zoneId: number) => void;
   setHuntMeta: (meta: HuntMeta | null) => void;
   setHuntArea: (area: HuntArea | null) => void;
   setHuntAreaSelecting: (active: boolean) => void;
   setHuntEditing: (active: boolean) => void;
+  setHuntRouteAdding: (active: boolean) => void;
   setHuntView: (view: HuntViewPreview) => void;
   setHuntMonsters: (monsters: HuntMonster[]) => void;
+  setHuntZoneId: (id: number | null) => void;
   setActiveTool: (tool: ToolId) => void;
   selectBrush: (brush: ActiveBrush | null) => void;
   setActiveTile: (tile: BrushOption | null) => void;

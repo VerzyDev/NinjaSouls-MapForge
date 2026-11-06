@@ -232,7 +232,40 @@ function improveCycle(order: number[], dist: number[][]): number[] {
   return cycleLength(best, dist) <= cycleLength(order, dist) ? best : order;
 }
 
-export function buildLoops(mask: Mask, nodes: Point[]): HuntLoop[] {
+function shortestTour(members: number[], dist: number[][]): number[] {
+  const order = [members[0]];
+  const left = new Set(members.slice(1));
+  while (left.size) {
+    const last = order[order.length - 1];
+    let next = -1;
+    for (const j of left) if (next === -1 || dist[last][j] < dist[last][next]) next = j;
+    order.push(next);
+    left.delete(next);
+  }
+  return improveCycle(order, dist);
+}
+
+export function insertionIndex(mask: Mask, nodes: Point[], p: Point): number {
+  const h = mask.length;
+  const w = h ? mask[0].length : 0;
+  const walk = bfs(mask, w, h, p.x, p.y).dist;
+  let best = nodes.length;
+  let bestCost = Infinity;
+  nodes.forEach((a, i) => {
+    const b = nodes[(i + 1) % nodes.length];
+    const toA = walk[a.y * w + a.x];
+    const toB = walk[b.y * w + b.x];
+    if (toA < 0 || toB < 0) return;
+    const cost = toA + toB - Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = i + 1;
+    }
+  });
+  return best;
+}
+
+export function buildLoops(mask: Mask, nodes: Point[], keepOrder = false): HuntLoop[] {
   const h = mask.length;
   const w = h ? mask[0].length : 0;
   const n = nodes.length;
@@ -246,16 +279,7 @@ export function buildLoops(mask: Mask, nodes: Point[]): HuntLoop[] {
     if (seen[seed]) continue;
     const members = nodes.map((_, j) => j).filter((j) => !seen[j] && (j === seed || dist[seed][j] >= 0));
     for (const j of members) seen[j] = true;
-    const order = [members[0]];
-    const left = new Set(members.slice(1));
-    while (left.size) {
-      const last = order[order.length - 1];
-      let next = -1;
-      for (const j of left) if (next === -1 || dist[last][j] < dist[last][next]) next = j;
-      order.push(next);
-      left.delete(next);
-    }
-    const tour = improveCycle(order, dist);
+    const tour = keepOrder ? members : shortestTour(members, dist);
     const path: Point[] = [nodes[tour[0]]];
     if (tour.length > 1) {
       for (let i = 0; i < tour.length; i++) {

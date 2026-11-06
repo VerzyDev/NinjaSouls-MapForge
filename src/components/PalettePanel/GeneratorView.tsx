@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { Dices, Sparkles } from 'lucide-react';
 
 import { cn } from '~/usecase/classNames';
+import { MapSpawns } from '~/domain/creature';
 import { ResolvedBiome } from '~/domain/biome';
 import { PaletteTileset } from '~/domain/palette';
 import { MapCustomZones } from '~/domain/customZone';
@@ -301,10 +302,11 @@ const GEN_MODE_KEY = 'generatorMode';
 interface GeneratorViewProps {
   creatureTilesets?: PaletteTileset[];
   huntZones: MapCustomZones | null;
+  spawns: MapSpawns | null;
   onEditHuntZones: (next: MapCustomZones) => void;
 }
 
-const GeneratorView = ({ creatureTilesets, huntZones, onEditHuntZones }: GeneratorViewProps) => {
+const GeneratorView = ({ creatureTilesets, huntZones, spawns, onEditHuntZones }: GeneratorViewProps) => {
   const [mode, setMode] = React.useState<GenMode>('terrain');
   const restored = React.useRef(false);
 
@@ -328,7 +330,7 @@ const GeneratorView = ({ creatureTilesets, huntZones, onEditHuntZones }: Generat
     <div className="flex min-h-0 flex-1 flex-col">
       <ModeToggle mode={mode} onMode={setMode} />
       {mode === 'hunt' ? (
-        <HuntView zones={huntZones} onEditZones={onEditHuntZones} creatureTilesets={creatureTilesets} />
+        <HuntView spawns={spawns} zones={huntZones} onEditZones={onEditHuntZones} creatureTilesets={creatureTilesets} />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
           <GeneratorPanel />

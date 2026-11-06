@@ -25,6 +25,8 @@ export interface HuntSession {
   boxSize: number;
   viewW: number;
   viewH: number;
+  aggroW: number;
+  aggroH: number;
   nodes: Point[];
   monsterTiles: BoxTile[];
   zoneId: number | null;
@@ -33,7 +35,8 @@ export interface HuntSession {
   lureLength: number;
   loops: Point[][];
   lures: number;
-  lureTargets: number[];
+  edited: boolean;
+  keepOrder: boolean;
 }
 
 export interface MoveDrag {

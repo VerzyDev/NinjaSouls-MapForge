@@ -26,7 +26,8 @@ import {
   HuntRescatterSignal,
   ZoneLayer,
   CustomZoneMode,
-  PaletteCategorySignal
+  PaletteCategorySignal,
+  HuntDeleteMonstersSignal
 } from './types';
 
 const ToolContext = React.createContext({} as ToolContextValue);
@@ -105,11 +106,14 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
   const [huntArea, setHuntArea] = React.useState<HuntArea | null>(null);
   const [huntAreaSelecting, setHuntAreaSelecting] = React.useState(false);
   const [huntEditing, setHuntEditing] = React.useState(false);
+  const [huntRouteAdding, setHuntRouteAdding] = React.useState(false);
   const [huntView, setHuntView] = React.useState<HuntViewPreview>({ show: false, w: 21, h: 11 });
   const [huntMonsters, setHuntMonsters] = React.useState<HuntMonster[]>([]);
+  const [huntZoneId, setHuntZoneId] = React.useState<number | null | undefined>(undefined);
   const [huntRescatterSignal, setHuntRescatterSignal] = React.useState<HuntRescatterSignal | null>(null);
   const [huntGenerateNonce, setHuntGenerateNonce] = React.useState(0);
   const [huntClearNonce, setHuntClearNonce] = React.useState(0);
+  const [huntDeleteMonstersSignal, setHuntDeleteMonstersSignal] = React.useState<HuntDeleteMonstersSignal | null>(null);
   const [referenceImage, setReferenceImageState] = React.useState<ReferenceImage | null>(null);
 
   const setReferenceImage = React.useCallback((image: ReferenceImage | null) => {
@@ -295,6 +299,10 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
 
   const requestHuntGenerate = React.useCallback(() => setHuntGenerateNonce((n) => n + 1), []);
   const requestHuntClear = React.useCallback(() => setHuntClearNonce((n) => n + 1), []);
+  const requestHuntDeleteMonsters = React.useCallback(
+    (zoneId: number) => setHuntDeleteMonstersSignal((prev) => ({ zoneId, nonce: (prev?.nonce ?? 0) + 1 })),
+    []
+  );
 
   const value = React.useMemo<ToolContextValue>(
     () => ({
@@ -330,21 +338,27 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
       huntArea,
       huntAreaSelecting,
       huntEditing,
+      huntRouteAdding,
       huntView,
       huntMonsters,
+      huntZoneId,
       huntRescatterSignal,
       huntGenerateNonce,
       huntClearNonce,
+      huntDeleteMonstersSignal,
       requestHuntPreview,
       requestHuntRescatter,
       requestHuntGenerate,
       requestHuntClear,
+      requestHuntDeleteMonsters,
       setHuntMeta,
       setHuntArea,
       setHuntAreaSelecting,
       setHuntEditing,
+      setHuntRouteAdding,
       setHuntView,
       setHuntMonsters,
+      setHuntZoneId,
       setActiveTool,
       selectBrush,
       setActiveTile,
@@ -399,21 +413,27 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
       huntArea,
       huntAreaSelecting,
       huntEditing,
+      huntRouteAdding,
       huntView,
       huntMonsters,
+      huntZoneId,
       huntRescatterSignal,
       huntGenerateNonce,
       huntClearNonce,
+      huntDeleteMonstersSignal,
       requestHuntPreview,
       requestHuntRescatter,
       requestHuntGenerate,
       requestHuntClear,
+      requestHuntDeleteMonsters,
       setHuntMeta,
       setHuntArea,
       setHuntAreaSelecting,
       setHuntEditing,
+      setHuntRouteAdding,
       setHuntView,
       setHuntMonsters,
+      setHuntZoneId,
       setActiveTool,
       selectBrush,
       setActiveTile,

@@ -1,7 +1,7 @@
 import { test, expect } from 'bun:test';
 
 import { Mask } from './hunt';
-import { buildLoops, buildRoute, nodePerArea, reachableFrom, keepMainAreas } from './huntRoute';
+import { buildLoops, buildRoute, nodePerArea, reachableFrom, keepMainAreas, insertionIndex } from './huntRoute';
 
 function grid(rows: string[]): Mask {
   return rows.map((r) => r.split('').map((c) => c === '#'));
@@ -128,6 +128,55 @@ test('keepMainAreas keeps a small room reached by stairs from another floor', ()
   expect(dropped).toBe(0);
   expect(mask[0][8]).toBe(true);
   expect(keepMainAreas(walk, area, 10).dropped).toBe(1);
+});
+
+test('buildLoops can keep the order the points were placed in', () => {
+  const m = grid(['##########', '##########', '##########']);
+  const nodes = [
+    { x: 0, y: 1 },
+    { x: 9, y: 1 },
+    { x: 1, y: 1 },
+    { x: 8, y: 1 }
+  ];
+  expect(buildLoops(m, nodes, true)[0].order).toEqual([0, 1, 2, 3]);
+  expect(buildLoops(m, nodes)[0].order).not.toEqual([0, 1, 2, 3]);
+});
+
+test('insertionIndex puts a point between its closest neighbours on the route', () => {
+  const m = grid(['##########', '##########', '##########']);
+  const nodes = [
+    { x: 0, y: 0 },
+    { x: 4, y: 0 },
+    { x: 9, y: 0 },
+    { x: 9, y: 2 },
+    { x: 0, y: 2 }
+  ];
+  expect(insertionIndex(m, nodes, { x: 6, y: 0 })).toBe(2);
+  expect(insertionIndex(m, nodes, { x: 5, y: 2 })).toBe(4);
+  expect(insertionIndex(m, [], { x: 5, y: 2 })).toBe(0);
+});
+
+test('insertionIndex measures walking, so a wall does not make a point look close', () => {
+  const m = grid(['#########', '########.', '#########']);
+  const wall = grid(['#####', '.....', '#####']);
+  wall[1][0] = true;
+  const nodes = [
+    { x: 0, y: 0 },
+    { x: 4, y: 0 },
+    { x: 4, y: 2 },
+    { x: 0, y: 2 }
+  ];
+  expect(insertionIndex(wall, nodes, { x: 3, y: 2 })).toBe(3);
+  expect(insertionIndex(m, [{ x: 0, y: 0 }], { x: 3, y: 2 })).toBe(1);
+});
+
+test('insertionIndex appends a point from a separate area', () => {
+  const m = grid(['###.###']);
+  const nodes = [
+    { x: 0, y: 0 },
+    { x: 2, y: 0 }
+  ];
+  expect(insertionIndex(m, nodes, { x: 5, y: 0 })).toBe(2);
 });
 
 test('nodePerArea adds a centred point to every area that has none', () => {

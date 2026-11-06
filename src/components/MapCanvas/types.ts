@@ -200,6 +200,7 @@ export interface MapCanvasContextInputs {
   onSelectCustomZone: (zoneId: number) => void;
   huntAreaSelecting: boolean;
   huntEditing: boolean;
+  huntRouteAdding: boolean;
   huntView: HuntViewPreview;
   huntMonsters: HuntMonster[];
   onHuntArea: (area: HuntArea | null) => void;

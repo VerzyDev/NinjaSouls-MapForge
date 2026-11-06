@@ -1,7 +1,23 @@
 import React from 'react';
-import { X, Eye, Plus, Brush, Route, Sparkles, SquareDashed } from 'lucide-react';
+import {
+  X,
+  Eye,
+  Plus,
+  Brush,
+  Route,
+  MapPin,
+  Repeat,
+  Trash2,
+  Grid3x3,
+  Sparkles,
+  Crosshair,
+  RotateCcw,
+  LucideIcon,
+  SquareDashed
+} from 'lucide-react';
 
 import { cn } from '~/usecase/classNames';
+import { MapSpawns } from '~/domain/creature';
 import { PaletteTileset } from '~/domain/palette';
 import { Input } from '~/components/commons/ui/input';
 import { Hint } from '~/components/commons/ui/tooltip';
@@ -13,9 +29,11 @@ import { HuntMode, HuntMonster, CustomZoneMode } from '~/usecase/context/ToolCon
 import { Select, SelectItem, SelectValue, SelectContent, SelectTrigger } from '~/components/commons/ui/select';
 import {
   MapCustomZones,
+  customZoneLabel,
   customZoneColor,
   sortCustomZones,
   nextCustomZoneId,
+  customZoneMatcher,
   emptyMapCustomZones,
   customZoneTileCounts,
   DEFAULT_CUSTOM_ZONE_RANGE
@@ -27,16 +45,25 @@ const SectionLabel = ({ children }: { children: React.ReactNode }) => (
   <span className="px-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">{children}</span>
 );
 
-const Toggle = ({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) => (
-  <button
-    onClick={onClick}
-    className={cn(
-      'flex-1 rounded px-1.5 py-1 text-[10px]',
-      active ? 'bg-primary/20 text-foreground' : 'text-muted-foreground hover:bg-item-hover hover:text-foreground'
-    )}
-  >
-    {children}
-  </button>
+interface ToggleProps {
+  hint: string;
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}
+
+const Toggle = ({ hint, active, onClick, children }: ToggleProps) => (
+  <Hint label={hint}>
+    <button
+      onClick={onClick}
+      className={cn(
+        'flex flex-1 items-center justify-center gap-1 rounded px-1 py-1 text-[10px]',
+        active ? 'bg-primary/20 text-foreground' : 'text-muted-foreground hover:bg-item-hover hover:text-foreground'
+      )}
+    >
+      {children}
+    </button>
+  </Hint>
 );
 
 const Notice = ({ children }: { children: React.ReactNode }) => (
@@ -64,19 +91,32 @@ const PAINT_MODES: { mode: CustomZoneMode; label: string; help: string }[] = [
   { mode: 'polygon', label: 'Polygon', help: 'Click the corners, then the first corner or Enter to fill. Ctrl erases.' }
 ];
 
-const PLACEMENTS: { mode: HuntMode; label: string; help: (n: number, lure: number) => string }[] = [
+const PLACEMENTS: {
+  mode: HuntMode;
+  label: string;
+  icon: LucideIcon;
+  help: (n: number, lure: number) => string;
+}[] = [
   {
     mode: 'rotation',
     label: 'Rotation',
+    icon: Repeat,
     help: (n, lure) =>
-      `Walk the loop: every ${lure} tiles of the path have their own ${n} monsters on screen, so you can always pull ${n} and box.`
+      `Keep walking the route and lure as you go: any ${lure} tiles of it pull at most ${n} monsters. Monsters only spawn where the route can pull them.`
   },
   {
     mode: 'box',
     label: 'Box spots',
-    help: (n) => `Every box point gets its own ${n} monsters on screen, for standing still and boxing.`
+    icon: Crosshair,
+    help: (n) =>
+      `Stand on a point and fight: each box point gets its own ${n} monsters on screen, and nothing spawns away from the points.`
   },
-  { mode: 'density', label: 'Density', help: (n) => `About ${n} monsters per screen, spread evenly over the route.` }
+  {
+    mode: 'density',
+    label: 'Density',
+    icon: Grid3x3,
+    help: (n) => `No pattern, just an even spread: about ${n} monsters per screen across the whole route.`
+  }
 ];
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -84,14 +124,16 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 interface HuntViewProps {
   creatureTilesets?: PaletteTileset[];
   zones: MapCustomZones | null;
+  spawns: MapSpawns | null;
   onEditZones: (next: MapCustomZones) => void;
 }
 
-const HuntView = ({ creatureTilesets, zones, onEditZones }: HuntViewProps) => {
+const HuntView = ({ creatureTilesets, zones, spawns, onEditZones }: HuntViewProps) => {
   const {
     huntMeta,
     huntArea,
     huntMonsters,
+    huntZoneId,
     huntAreaSelecting,
     activeTool,
     activeCustomZoneId,
@@ -101,10 +143,13 @@ const HuntView = ({ creatureTilesets, zones, onEditZones }: HuntViewProps) => {
     requestHuntRescatter,
     requestHuntGenerate,
     requestHuntClear,
+    requestHuntDeleteMonsters,
     setHuntAreaSelecting,
     setHuntEditing,
+    setHuntRouteAdding,
     setHuntView,
     setHuntMonsters,
+    setHuntZoneId: setZoneId,
     setActiveTool,
     setActiveCustomZone,
     setCustomZoneMode,
@@ -116,11 +161,16 @@ const HuntView = ({ creatureTilesets, zones, onEditZones }: HuntViewProps) => {
   const [mode, setMode] = React.useState<HuntMode>('rotation');
   const [lureLength, setLureLength] = React.useState<number | null>(null);
   const [spawntime, setSpawntime] = React.useState(spawnTime);
-  const [zoneId, setZoneId] = React.useState<number | null>(null);
+  const zoneId = huntZoneId ?? null;
   const [showView, setShowView] = React.useState(false);
   const zoneList = React.useMemo(() => sortCustomZones(zones?.list ?? []), [zones]);
   const tileCounts = React.useMemo(() => (zones ? customZoneTileCounts(zones) : new Map<number, number>()), [zones]);
   const zoneTiles = zoneId != null ? (tileCounts.get(zoneId) ?? 0) : 0;
+  const zoneMonsters = React.useMemo(() => {
+    if (zoneId == null || !spawns) return 0;
+    const inZone = customZoneMatcher(zones, zoneId);
+    return spawns.placements.filter((p) => !p.isNpc && inZone(p)).length;
+  }, [spawns, zones, zoneId]);
   const painting = zoneId != null && activeTool === 'custom_zone' && zoneLayer === 'hunt' && activeCustomZoneId === zoneId;
   const total = huntMonsters.reduce((sum, m) => sum + m.count, 0);
   const layoutSize = total > 0 ? total : (cfg?.boxSize ?? 8);
@@ -178,21 +228,41 @@ const HuntView = ({ creatureTilesets, zones, onEditZones }: HuntViewProps) => {
     return () => setHuntEditing(false);
   }, [setHuntEditing]);
 
+  const [routeAdding, setRouteAdding] = React.useState(false);
+  const hasPreview = !!huntMeta;
+  React.useEffect(() => {
+    if (!hasPreview) setRouteAdding(false);
+  }, [hasPreview]);
+
+  React.useEffect(() => {
+    setHuntRouteAdding(routeAdding);
+    return () => setHuntRouteAdding(false);
+  }, [routeAdding, setHuntRouteAdding]);
+
   React.useEffect(() => {
     setHuntView({ show: showView, w: cfg?.viewWidth ?? 21, h: cfg?.viewHeight ?? 11 });
   }, [showView, cfg, setHuntView]);
 
-  const pickedFirstZone = React.useRef(false);
+  const restoredZone = React.useRef(false);
   React.useEffect(() => {
-    if (pickedFirstZone.current || zoneList.length === 0) return;
-    pickedFirstZone.current = true;
-    setZoneId(zoneList[0].id);
+    if (restoredZone.current || zoneList.length === 0) return;
+    restoredZone.current = true;
+    if (huntZoneId === null) return;
+    if (!zoneList.some((z) => z.id === huntZoneId)) setZoneId(zoneList[0].id);
     setZoneLayer('hunt');
-  }, [zoneList, setZoneLayer]);
+  }, [zoneList, huntZoneId, setZoneId, setZoneLayer]);
 
   React.useEffect(() => {
     if (!cfg || !huntMeta) return;
-    requestHuntRescatter({ mode, boxSize: layoutSize, lureLength: lure, viewW: cfg.viewWidth, viewH: cfg.viewHeight });
+    requestHuntRescatter({
+      mode,
+      boxSize: layoutSize,
+      lureLength: lure,
+      viewW: cfg.viewWidth,
+      viewH: cfg.viewHeight,
+      aggroW: cfg.aggroWidth,
+      aggroH: cfg.aggroHeight
+    });
   }, [layoutSize, mode, lure]);
 
   const startPaint = (id: number) => {
@@ -226,7 +296,7 @@ const HuntView = ({ creatureTilesets, zones, onEditZones }: HuntViewProps) => {
   };
 
   const canPreview = !!cfg && (zoneId != null ? zoneTiles > 0 : !!huntArea);
-  const onPreview = () => {
+  const rebuildRoute = () => {
     if (!cfg || !canPreview) return;
     if (painting) stopPaint();
     requestHuntPreview({
@@ -237,14 +307,48 @@ const HuntView = ({ creatureTilesets, zones, onEditZones }: HuntViewProps) => {
       lureLength: lure,
       viewW: cfg.viewWidth,
       viewH: cfg.viewHeight,
+      aggroW: cfg.aggroWidth,
+      aggroH: cfg.aggroHeight,
       spawntime
     });
   };
 
+  const onPreview = () => {
+    if (!cfg || !huntMeta?.edited) {
+      rebuildRoute();
+      return;
+    }
+    requestHuntRescatter({
+      mode,
+      boxSize: layoutSize,
+      lureLength: lure,
+      viewW: cfg.viewWidth,
+      viewH: cfg.viewHeight,
+      aggroW: cfg.aggroWidth,
+      aggroH: cfg.aggroHeight
+    });
+  };
+
   const areaSize = huntArea ? `${huntArea.maxX - huntArea.minX + 1} x ${huntArea.maxY - huntArea.minY + 1}` : null;
-  const placement = PLACEMENTS.find((p) => p.mode === mode)!;
   const unit = mode === 'rotation' ? 'per lure' : mode === 'box' ? 'per box' : 'per screen';
-  const groupWord = mode === 'rotation' ? 'lure' : 'box';
+  const canGenerate = !!huntMeta && huntMeta.points > 0 && total > 0;
+  const previewHint = !canPreview
+    ? zoneId != null
+      ? 'Paint the zone first'
+      : 'Select an area first'
+    : huntMeta?.edited
+      ? 'Scatter the monsters again and keep your route.'
+      : huntMeta
+        ? 'Rebuild the route and scatter again.'
+        : 'Draw the route and scatter the monsters. Nothing is written to the map yet.';
+  const generateHint =
+    total === 0
+      ? 'Add a creature first'
+      : !huntMeta
+        ? 'Preview the hunt first'
+        : zoneId != null
+          ? "Write the monsters to the map, replacing the zone's current ones. NPCs stay. Ctrl+Z undoes."
+          : 'Write the monsters to the map. Ctrl+Z undoes.';
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
@@ -257,10 +361,10 @@ const HuntView = ({ creatureTilesets, zones, onEditZones }: HuntViewProps) => {
             </SelectTrigger>
             <SelectContent>
               {zoneList.map((z) => (
-                <SelectItem key={z.id} value={String(z.id)} textValue={`Hunt zone ${z.id}`}>
+                <SelectItem key={z.id} value={String(z.id)} textValue={customZoneLabel(z, 'Hunt zone')}>
                   <span className="flex items-center gap-2">
                     <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: customZoneColor(z, z.id) }} />
-                    Hunt zone {z.id}
+                    {customZoneLabel(z, 'Hunt zone')}
                     <span className="text-muted-foreground">{plural(tileCounts.get(z.id) ?? 0, 'tile')}</span>
                   </span>
                 </SelectItem>
@@ -268,7 +372,7 @@ const HuntView = ({ creatureTilesets, zones, onEditZones }: HuntViewProps) => {
               <SelectItem value={RECTANGLE}>Rectangle (no zone)</SelectItem>
             </SelectContent>
           </Select>
-          <Hint label="New hunt zone">
+          <Hint label="New hunt zone. Hunt zones stay in the editor and never reach the server.">
             <Button size="sm" variant="outline" onClick={newZone} className="h-8 w-8 p-0">
               <Plus className="h-3.5 w-3.5" />
             </Button>
@@ -277,36 +381,29 @@ const HuntView = ({ creatureTilesets, zones, onEditZones }: HuntViewProps) => {
 
         {zoneId != null ? (
           <div className="flex flex-col gap-1.5 rounded-md border border-border/50 p-1.5">
-            <Button
-              size="sm"
-              variant={painting ? 'default' : 'outline'}
-              onClick={() => (painting ? stopPaint() : startPaint(zoneId))}
-            >
-              <Brush className="h-3.5 w-3.5" />
-              {painting ? 'Done painting' : zoneTiles > 0 ? 'Edit zone tiles' : 'Paint zone tiles'}
-            </Button>
+            <Hint label="Paint the walkable tiles of the hunt on every floor it uses. Tiles you leave out never get monsters.">
+              <Button
+                size="sm"
+                variant={painting ? 'default' : 'outline'}
+                onClick={() => (painting ? stopPaint() : startPaint(zoneId))}
+              >
+                <Brush className="h-3.5 w-3.5" />
+                {painting ? 'Done painting' : zoneTiles > 0 ? 'Edit zone tiles' : 'Paint zone tiles'}
+              </Button>
+            </Hint>
             {painting && (
-              <>
-                <div className="flex gap-1">
-                  {PAINT_MODES.map((option) => (
-                    <Toggle
-                      key={option.mode}
-                      active={customZoneMode === option.mode}
-                      onClick={() => setCustomZoneMode(option.mode)}
-                    >
-                      {option.label}
-                    </Toggle>
-                  ))}
-                </div>
-                <span className="px-0.5 text-[10px] leading-relaxed text-muted-foreground">
-                  {PAINT_MODES.find((o) => o.mode === customZoneMode)?.help}
-                </span>
-              </>
-            )}
-            {!painting && zoneTiles === 0 && (
-              <span className="px-0.5 text-[10px] leading-relaxed text-muted-foreground">
-                This zone is empty. Paint the walkable tiles of the hunt; tiles you leave out never get monsters.
-              </span>
+              <div className="flex gap-1">
+                {PAINT_MODES.map((option) => (
+                  <Toggle
+                    key={option.mode}
+                    hint={option.help}
+                    active={customZoneMode === option.mode}
+                    onClick={() => setCustomZoneMode(option.mode)}
+                  >
+                    {option.label}
+                  </Toggle>
+                ))}
+              </div>
             )}
           </div>
         ) : (
@@ -330,23 +427,30 @@ const HuntView = ({ creatureTilesets, zones, onEditZones }: HuntViewProps) => {
         <SectionLabel>Placement</SectionLabel>
         <div className="flex gap-1 rounded-md border border-border/50 p-0.5">
           {PLACEMENTS.map((option) => (
-            <Toggle key={option.mode} active={mode === option.mode} onClick={() => setMode(option.mode)}>
+            <Toggle
+              key={option.mode}
+              active={mode === option.mode}
+              onClick={() => setMode(option.mode)}
+              hint={option.help(layoutSize, lure)}
+            >
+              <option.icon className="h-3 w-3 shrink-0" />
               {option.label}
             </Toggle>
           ))}
         </div>
-        <span className="px-0.5 text-[10px] leading-relaxed text-muted-foreground">{placement.help(layoutSize, lure)}</span>
         {mode === 'rotation' && (
-          <label className="flex items-center justify-between gap-2 px-0.5 text-[10px] text-muted-foreground">
-            Walk per lure (tiles)
-            <Input
-              min={3}
-              value={lure}
-              type="number"
-              className="h-6 w-16 px-1 text-center text-[11px] tabular-nums"
-              onChange={(e) => setLureLength(Math.max(3, Number(e.target.value) | 0))}
-            />
-          </label>
+          <Hint label="How many tiles of the route one lure takes. Longer lures spread the monsters further apart.">
+            <label className="flex items-center justify-between gap-2 px-0.5 text-[10px] text-muted-foreground">
+              Tiles per lure
+              <Input
+                min={3}
+                value={lure}
+                type="number"
+                className="h-6 w-16 px-1 text-center text-[11px] tabular-nums"
+                onChange={(e) => setLureLength(Math.max(3, Number(e.target.value) | 0))}
+              />
+            </label>
+          </Hint>
         )}
       </div>
 
@@ -373,40 +477,42 @@ const HuntView = ({ creatureTilesets, zones, onEditZones }: HuntViewProps) => {
                 key={m.name}
                 className="group relative flex flex-col items-center gap-1 rounded-md border border-border/50 bg-muted/20 p-1.5"
               >
-                <button
-                  title={`Remove ${m.name}`}
-                  onClick={() => removeMonster(m.name)}
-                  className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground group-hover:flex"
-                >
-                  <X className="h-2.5 w-2.5" />
-                </button>
+                <Hint label={`Remove ${m.name}`}>
+                  <button
+                    onClick={() => removeMonster(m.name)}
+                    className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground group-hover:flex"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </Hint>
                 <CreatureImage size={36} monster={m} />
-                <span title={m.name} className="w-full truncate text-center text-[10px] text-foreground">
-                  {m.name}
-                </span>
-                <label title={`${m.name} ${unit}`} className="flex w-full items-center gap-1 text-[9px] text-muted-foreground">
-                  Qty
-                  <Input
-                    min={0}
-                    type="number"
-                    value={m.count}
-                    className="h-6 px-1 text-center text-[11px] tabular-nums"
-                    onChange={(e) => patchMonster(m.name, { count: Math.max(0, Number(e.target.value) | 0) })}
-                  />
-                </label>
-                <label
-                  title={`${m.name} respawn in seconds`}
-                  className="flex w-full items-center gap-1 text-[9px] text-muted-foreground"
-                >
-                  Resp
-                  <Input
-                    min={1}
-                    type="number"
-                    value={m.spawntime}
-                    className="h-6 px-1 text-center text-[11px] tabular-nums"
-                    onChange={(e) => patchMonster(m.name, { spawntime: Math.max(1, Number(e.target.value) | 0) })}
-                  />
-                </label>
+                <Hint label={m.name}>
+                  <span className="w-full truncate text-center text-[10px] text-foreground">{m.name}</span>
+                </Hint>
+                <Hint label={`${m.name} ${unit}`}>
+                  <label className="flex w-full items-center gap-1 text-[9px] text-muted-foreground">
+                    Qty
+                    <Input
+                      min={0}
+                      type="number"
+                      value={m.count}
+                      className="h-6 px-1 text-center text-[11px] tabular-nums"
+                      onChange={(e) => patchMonster(m.name, { count: Math.max(0, Number(e.target.value) | 0) })}
+                    />
+                  </label>
+                </Hint>
+                <Hint label={`${m.name} respawn in seconds`}>
+                  <label className="flex w-full items-center gap-1 text-[9px] text-muted-foreground">
+                    Resp
+                    <Input
+                      min={1}
+                      type="number"
+                      value={m.spawntime}
+                      className="h-6 px-1 text-center text-[11px] tabular-nums"
+                      onChange={(e) => patchMonster(m.name, { spawntime: Math.max(1, Number(e.target.value) | 0) })}
+                    />
+                  </label>
+                </Hint>
               </div>
             ))}
           </div>
@@ -426,24 +532,58 @@ const HuntView = ({ creatureTilesets, zones, onEditZones }: HuntViewProps) => {
       </div>
 
       <div className="flex gap-1.5">
-        <Button size="sm" variant="outline" className="flex-1" onClick={onPreview} disabled={!canPreview}>
-          <Route className="h-3.5 w-3.5" />
-          {huntMeta ? 'Re-roll' : 'Preview'}
-        </Button>
+        <Hint label={previewHint}>
+          <span className="flex flex-1">
+            <Button size="sm" variant="outline" className="flex-1" onClick={onPreview} disabled={!canPreview}>
+              <Route className="h-3.5 w-3.5" />
+              {huntMeta ? 'Re-roll' : 'Preview'}
+            </Button>
+          </span>
+        </Hint>
         <Hint label={cfg ? `Show the ${cfg.viewWidth}x${cfg.viewHeight} player screen on each box point` : ''}>
-          <Button
-            size="sm"
-            onClick={() => setShowView((v) => !v)}
-            variant={showView ? 'default' : 'outline'}
-            disabled={!huntMeta || huntMeta.points === 0}
-          >
-            <Eye className="h-3.5 w-3.5" />
-            View
-          </Button>
+          <span className="flex">
+            <Button
+              size="sm"
+              onClick={() => setShowView((v) => !v)}
+              variant={showView ? 'default' : 'outline'}
+              disabled={!huntMeta || huntMeta.points === 0}
+            >
+              <Eye className="h-3.5 w-3.5" />
+              View
+            </Button>
+          </span>
         </Hint>
       </div>
 
-      {huntMeta && huntMeta.points === 0 && <Notice>No walkable tiles in this area.</Notice>}
+      {huntMeta && (
+        <div className="flex gap-1.5">
+          <Hint label="Click any walkable tile to add a route point. Drag a point to move it, right-click to remove it. The route keeps your order. Change floors to edit each floor's route.">
+            <span className="flex flex-1">
+              <Button
+                size="sm"
+                className="flex-1"
+                onClick={() => setRouteAdding((v) => !v)}
+                variant={routeAdding ? 'default' : 'outline'}
+              >
+                <MapPin className="h-3.5 w-3.5" />
+                Edit route
+              </Button>
+            </span>
+          </Hint>
+          {huntMeta.edited && (
+            <Hint label="Throw away your edits and go back to the automatic route on every floor.">
+              <span className="flex">
+                <Button size="sm" variant="outline" onClick={rebuildRoute}>
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Reset
+                </Button>
+              </span>
+            </Hint>
+          )}
+        </div>
+      )}
+
+      {huntMeta && huntMeta.points === 0 && !huntMeta.edited && <Notice>No walkable tiles in this area.</Notice>}
 
       {huntMeta && huntMeta.isolated > 0 && (
         <Notice>
@@ -453,7 +593,7 @@ const HuntView = ({ creatureTilesets, zones, onEditZones }: HuntViewProps) => {
 
       {huntMeta && huntMeta.short > 0 && (
         <Notice>
-          {plural(huntMeta.short, groupWord)} can&apos;t fit {total} monsters on screen. Drag the nearby points to a wider spot or
+          {plural(huntMeta.short, 'box')} can&apos;t fit {total} monsters on screen. Drag the nearby points to a wider spot or
           right-click to remove them.
         </Notice>
       )}
@@ -477,16 +617,28 @@ const HuntView = ({ creatureTilesets, zones, onEditZones }: HuntViewProps) => {
         </div>
       )}
 
-      <Button size="sm" onClick={() => requestHuntGenerate()} disabled={!huntMeta || huntMeta.points === 0 || total === 0}>
-        <Sparkles className="h-3.5 w-3.5" />
-        {zoneId != null ? `Generate in zone ${zoneId}` : 'Generate'}
-      </Button>
+      <Hint label={generateHint}>
+        <span className="flex">
+          <Button size="sm" className="flex-1" disabled={!canGenerate} onClick={() => requestHuntGenerate()}>
+            <Sparkles className="h-3.5 w-3.5" />
+            {zoneId != null ? `Generate in zone ${zoneId}` : 'Generate'}
+          </Button>
+        </span>
+      </Hint>
 
-      <p className="mt-auto pt-1 text-[10px] leading-relaxed text-muted-foreground">
-        A zone covers every floor you painted; change floors to see and edit each route. Drag a box point to move it, click the
-        route to add one, right-click to remove. Generating replaces the zone&apos;s monsters (NPCs stay); Ctrl+Z undoes. Hunt
-        zones never reach the server.
-      </p>
+      {zoneId != null && zoneMonsters > 0 && (
+        <Hint label={`Remove every monster in zone ${zoneId} on all floors, with their spawn areas. NPCs stay. Ctrl+Z undoes.`}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-red-400 hover:text-red-300"
+            onClick={() => requestHuntDeleteMonsters(zoneId)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete {plural(zoneMonsters, 'monster')}
+          </Button>
+        </Hint>
+      )}
     </div>
   );
 };

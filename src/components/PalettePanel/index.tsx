@@ -461,6 +461,7 @@ const PalettePanel = ({
         <ZonesList zones={customZones} onGoto={onGotoZone} onEdit={onEditCustomZones} />
       ) : isGenerator ? (
         <GeneratorView
+          spawns={spawns}
           huntZones={huntZones}
           onEditHuntZones={onEditHuntZones}
           creatureTilesets={creatureTilesets}

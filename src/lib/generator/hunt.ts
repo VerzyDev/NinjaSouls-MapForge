@@ -179,53 +179,221 @@ export function fillBoxes(
   return out;
 }
 
-export function lureSegments(loopLength: number, lureLength: number): number[] {
-  const step = Math.max(1, lureLength);
-  const count = Math.max(1, Math.ceil(loopLength / step));
-  const size = loopLength / count;
-  return Array.from({ length: loopLength }, (_, i) => Math.min(count - 1, Math.floor(i / size)));
+const ROOM_CLEARANCES = [2, 1];
+const ROOM_MIN_TILES = 16;
+const ROOM_MIN_MONSTERS = 2;
+const ROOM_TILES_FOR_FULL_LURE = 128;
+const ROOM_PILLAR_TILES = 9;
+
+function erode(mask: Mask): Mask {
+  return mask.map((row, y) => row.map((cell, x) => cell && STEPS.every(([dx, dy]) => mask[y + dy]?.[x + dx])));
 }
 
-export function fillRotation(
-  mask: Mask,
-  loop: Point[],
-  perLure: number,
-  lureLength: number,
-  halfW: number,
-  halfH: number,
-  rand: () => number,
-  firstLure = 0,
-  spacing?: Spacing
-): { tiles: BoxTile[]; lures: number; targets: number[] } {
-  if (loop.length === 0) return { tiles: [], lures: 0, targets: [] };
+function withoutPillars(mask: Mask): Mask {
+  const solid = mask.map((row) => [...row]);
+  const seen = mask.map((row) => row.map(() => false));
+  mask.forEach((row, y) => {
+    row.forEach((cell, x) => {
+      if (cell || seen[y][x]) return;
+      seen[y][x] = true;
+      const blob: Point[] = [{ x, y }];
+      for (let head = 0; head < blob.length; head++) {
+        for (const [dx, dy] of STEPS) {
+          const nx = blob[head].x + dx;
+          const ny = blob[head].y + dy;
+          if (ny < 0 || nx < 0 || ny >= mask.length || nx >= row.length || mask[ny][nx] || seen[ny][nx]) continue;
+          seen[ny][nx] = true;
+          blob.push({ x: nx, y: ny });
+        }
+      }
+      if (blob.length <= ROOM_PILLAR_TILES) for (const p of blob) solid[p.y][p.x] = true;
+    });
+  });
+  return solid;
+}
+
+export function findRooms(mask: Mask): Point[][] {
   const h = mask.length;
   const w = h ? mask[0].length : 0;
-  const segment = lureSegments(loop.length, lureLength);
-  const lures = segment[segment.length - 1] + 1;
-  const owner = nearestSource(mask, loop);
-  const cells: Point[][] = Array.from({ length: lures }, () => []);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const o = owner[y * w + x];
-      if (o === -1) continue;
-      const src = loop[o];
-      if (Math.abs(x - src.x) > halfW || Math.abs(y - src.y) > halfH) continue;
-      cells[segment[o]].push({ x, y });
+  const solid = withoutPillars(mask);
+  const owner = new Int32Array(w * h).fill(-1);
+  const rooms: Point[][] = [];
+  const take = (x: number, y: number, room: number) => {
+    owner[y * w + x] = room;
+    rooms[room].push({ x, y });
+  };
+  for (const clearance of ROOM_CLEARANCES) {
+    let core: Mask = solid.map((row, y) => row.map((cell, x) => cell && owner[y * w + x] === -1));
+    for (let i = 0; i < clearance; i++) core = erode(core);
+    const first = rooms.length;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!core[y][x] || owner[y * w + x] !== -1) continue;
+        const room = rooms.length;
+        rooms.push([]);
+        take(x, y, room);
+        for (let head = 0; head < rooms[room].length; head++) {
+          const p = rooms[room][head];
+          for (const [dx, dy] of STEPS.slice(0, 4)) {
+            const nx = p.x + dx;
+            const ny = p.y + dy;
+            if (core[ny]?.[nx] && owner[ny * w + nx] === -1) take(nx, ny, room);
+          }
+        }
+      }
+    }
+    for (let i = 0; i < clearance; i++) {
+      for (let room = first; room < rooms.length; room++) {
+        for (const p of [...rooms[room]]) {
+          for (const [dx, dy] of STEPS) {
+            const nx = p.x + dx;
+            const ny = p.y + dy;
+            if (solid[ny]?.[nx] && owner[ny * w + nx] === -1) take(nx, ny, room);
+          }
+        }
+      }
     }
   }
-  const walked = new Array(lures).fill(0);
-  for (const s of segment) walked[s]++;
-  const screen = (halfW * 2 + 1) * (halfH * 2 + 1);
-  const targets = cells.map((cell, lure) => {
-    const byWalk = Math.round((perLure * walked[lure]) / Math.max(1, lureLength));
-    const byFloor = lures === 1 ? Math.round((perLure * cell.length) / screen) : 0;
-    return Math.min(perLure, Math.max(byWalk, byFloor));
+  return rooms.map((room) => room.filter((p) => mask[p.y][p.x])).filter((room) => room.length > 0);
+}
+
+export function roomTarget(tiles: number, perLure: number): number {
+  if (tiles < ROOM_MIN_TILES) return 0;
+  const byArea = Math.round((tiles * perLure) / ROOM_TILES_FOR_FULL_LURE);
+  return Math.min(perLure, Math.max(ROOM_MIN_MONSTERS, byArea));
+}
+
+export function nodePerRoom(mask: Mask, nodes: Point[]): Point[] {
+  const out = [...nodes];
+  for (const room of findRooms(mask)) {
+    if (room.length < ROOM_MIN_TILES) continue;
+    const inside = new Set(room.map((p) => `${p.x},${p.y}`));
+    if (nodes.some((n) => inside.has(`${n.x},${n.y}`))) continue;
+    const cx = room.reduce((sum, p) => sum + p.x, 0) / room.length;
+    const cy = room.reduce((sum, p) => sum + p.y, 0) / room.length;
+    const dist = (p: Point) => Math.max(Math.abs(p.x - cx), Math.abs(p.y - cy));
+    out.push(room.reduce((best, p) => (dist(p) < dist(best) ? p : best)));
+  }
+  return out;
+}
+
+export interface LureRules {
+  perLure: number;
+  lureLength: number;
+  aggroW: number;
+  aggroH: number;
+}
+
+export interface RouteStop {
+  loop: number;
+  index: number;
+}
+
+const LURE_GAPS = [8, 5, 0];
+const LURE_STRIDE = 2;
+const ROOM_LURE_SHARE = 0.75;
+
+function shuffle<T>(items: T[], rand: () => number) {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+}
+
+export function stopsPulling(mask: Mask, loops: Point[][], c: Point, aggroW: number, aggroH: number): RouteStop[] {
+  const w = mask[0].length;
+  const halfW = Math.floor(aggroW / 2);
+  const halfH = Math.floor(aggroH / 2);
+  const reached = new Set([c.y * w + c.x]);
+  const queue = [c];
+  for (let head = 0; head < queue.length; head++) {
+    const p = queue[head];
+    for (const [dx, dy] of STEPS) {
+      const nx = p.x + dx;
+      const ny = p.y + dy;
+      if (Math.abs(nx - c.x) > halfW || Math.abs(ny - c.y) > halfH || !mask[ny]?.[nx] || reached.has(ny * w + nx)) continue;
+      if (dx !== 0 && dy !== 0 && !mask[p.y][nx] && !mask[ny][p.x]) continue;
+      reached.add(ny * w + nx);
+      queue.push({ x: nx, y: ny });
+    }
+  }
+  const stops: RouteStop[] = [];
+  loops.forEach((path, loop) => {
+    path.forEach((p, index) => {
+      if (reached.has(p.y * w + p.x)) stops.push({ loop, index });
+    });
   });
-  const tiles: BoxTile[] = [];
-  cells.forEach((cell, lure) => {
-    for (const p of spreadAmong(cell, targets[lure], rand, spacing)) tiles.push({ x: p.x, y: p.y, box: firstLure + lure });
+  return stops;
+}
+
+function stretchesHit(stops: RouteStop[], loops: Point[][], lureLength: number): Map<number, Set<number>> {
+  const hit = new Map<number, Set<number>>();
+  for (const { loop, index } of stops) {
+    const length = loops[loop].length;
+    const span = Math.min(Math.max(1, lureLength), length);
+    let starts = hit.get(loop);
+    if (!starts) hit.set(loop, (starts = new Set()));
+    for (let back = 0; back < span; back++) starts.add((index - back + length) % length);
+  }
+  return hit;
+}
+
+export function fillLures(mask: Mask, loops: Point[][], rules: LureRules, rand: () => number): { tiles: BoxTile[]; lures: number } {
+  const { perLure, lureLength, aggroW, aggroH } = rules;
+  if (perLure <= 0 || loops.length === 0) return { tiles: [], lures: 0 };
+  const w = mask[0].length;
+  const spacing = createSpacing(mask);
+  const load = loops.map((path) => new Int32Array(path.length));
+  const roomAt = new Map<number, number>();
+  const roomLeft: number[] = [];
+  findRooms(mask).forEach((room) => {
+    if (room.length > aggroW * aggroH) return;
+    for (const p of room) roomAt.set(p.y * w + p.x, roomLeft.length);
+    roomLeft.push(roomTarget(room.length, perLure));
   });
-  return { tiles, lures, targets };
+  const pool: Point[] = [];
+  mask.forEach((row, y) => {
+    row.forEach((cell, x) => {
+      const sampled = x % LURE_STRIDE === 0 && y % LURE_STRIDE === 0;
+      if (cell && (sampled || roomAt.has(y * w + x))) pool.push({ x, y });
+    });
+  });
+  shuffle(pool, rand);
+  const placed: { point: Point; first: RouteStop }[] = [];
+  const inRoom = (p: Point) => roomAt.has(p.y * w + p.x);
+  const roomTiles = pool.filter(inRoom);
+  const phases: [Point[], number][] = [
+    [roomTiles, Math.ceil(perLure * ROOM_LURE_SHARE)],
+    [pool.filter((p) => !inRoom(p)), perLure],
+    [roomTiles, perLure]
+  ];
+  for (const [group, cap] of phases) {
+    let open = group;
+    for (const gap of LURE_GAPS) {
+      const rejected: Point[] = [];
+      for (const c of open) {
+        const room = roomAt.get(c.y * w + c.x);
+        if (!isFree(spacing, c) || (room !== undefined && roomLeft[room] <= 0)) continue;
+        if (placed.some(({ point }) => Math.max(Math.abs(point.x - c.x), Math.abs(point.y - c.y)) < gap)) {
+          rejected.push(c);
+          continue;
+        }
+        const stops = stopsPulling(mask, loops, c, aggroW, aggroH);
+        if (stops.length === 0) continue;
+        const hit = stretchesHit(stops, loops, lureLength);
+        const full = [...hit].some(([loop, starts]) => [...starts].some((start) => load[loop][start] >= cap));
+        if (full) continue;
+        for (const [loop, starts] of hit) for (const start of starts) load[loop][start]++;
+        if (room !== undefined) roomLeft[room]--;
+        claim(spacing, c);
+        placed.push({ point: c, first: stops[0] });
+      }
+      open = rejected;
+    }
+  }
+  placed.sort((a, b) => a.first.loop - b.first.loop || a.first.index - b.first.index);
+  const tiles = placed.map(({ point }, i) => ({ ...point, box: Math.floor(i / perLure) }));
+  return { tiles, lures: Math.ceil(tiles.length / perLure) };
 }
 
 const MIN_SCREEN_FLOOR = 0.25;

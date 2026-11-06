@@ -124,6 +124,7 @@ const MapCanvas = (props: MapCanvasProps) => {
     pinPosition: tool.pinPosition,
     huntAreaSelecting: tool.huntAreaSelecting,
     huntEditing: tool.huntEditing,
+    huntRouteAdding: tool.huntRouteAdding,
     huntView: tool.huntView,
     huntMonsters: tool.huntMonsters,
     onHuntArea: tool.setHuntArea,
@@ -217,6 +218,12 @@ const MapCanvas = (props: MapCanvasProps) => {
     if (tool.huntGenerateNonce === 0) return;
     interaction.generateHunt();
   }, [tool.huntGenerateNonce]);
+
+  React.useEffect(() => {
+    const signal = tool.huntDeleteMonstersSignal;
+    if (!signal) return;
+    interaction.deleteHuntZoneMonsters(signal.zoneId);
+  }, [tool.huntDeleteMonstersSignal?.nonce]);
 
   React.useEffect(() => {
     if (tool.huntClearNonce === 0) return;
