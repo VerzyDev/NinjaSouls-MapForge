@@ -382,7 +382,7 @@ export function useMapRenderer(deps: RendererDeps) {
     const byId = new Map<number, CustomZone>(zones.list.map((zone) => [zone.id, zone]));
     const size = TILE * zoom;
     const tiny = size < 6;
-    const line = Math.max(1, Math.min(3, size * 0.07));
+    const line = inputs.current.zoneLayer === 'hunt' ? 1 : Math.max(1, Math.min(3, size * 0.07));
     const order = [...tilesByZone.keys()].sort((a, b) => (a === selected ? 1 : b === selected ? -1 : a - b));
 
     ctx.save();
