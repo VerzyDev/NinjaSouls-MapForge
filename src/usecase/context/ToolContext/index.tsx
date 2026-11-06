@@ -79,7 +79,7 @@ export const ToolProvider = ({ children }: ToolProviderProps) => {
   const [activeTile, setActiveTile] = React.useState<BrushOption | null>(null);
   const [secondaryTile, setSecondaryTile] = React.useState<BrushOption | null>(null);
   const [brushSize, setBrushSize] = React.useState(1);
-  const [brushShape, setBrushShape] = React.useState<BrushShape>('circle');
+  const [brushShape, setBrushShape] = React.useState<BrushShape>('square');
   const [doodadThickness, setDoodadThicknessState] = React.useState<number | null>(null);
   const appliedTile = React.useRef<string | null>(null);
   const tileRestored = React.useRef(false);
