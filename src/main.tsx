@@ -28,7 +28,7 @@ import { openReplaceItem } from '~/adapter/windows';
 import PalettePanel from '~/components/PalettePanel';
 import { serializeHouseJson } from '~/lib/map/houseFile';
 import ScriptEditor from '~/components/ScriptEditor';
-import { MapCustomZones } from '~/domain/customZone';
+import { MapCustomZones, customZoneFocus } from '~/domain/customZone';
 import { Town, MapView, Position } from '~/domain/map';
 import MapProperties from '~/components/MapProperties';
 import MapStatistics from '~/components/MapStatistics';
@@ -68,7 +68,7 @@ import { ZoneLayer } from '~/usecase/context/ToolContext/types';
 import { useMapSpawns } from '~/usecase/hooks/Workspace/useMapSpawns';
 import { useMapHouses } from '~/usecase/hooks/Workspace/useMapHouses';
 import { addWaypoint, nextWaypointName } from '~/usecase/waypointEdits';
-import { huntZonesPath, saveCustomZones, customZonesPath } from '~/adapter/customZones';
+import { huntZonesPath, loadHuntZones, saveCustomZones, saveServerZones } from '~/adapter/customZones';
 import { useMapCreatures } from '~/usecase/hooks/Workspace/useMapCreatures';
 import { useMapWaypoints } from '~/usecase/hooks/Workspace/useMapWaypoints';
 import { useAppShortcuts } from '~/usecase/hooks/Workspace/useAppShortcuts';
@@ -383,7 +383,7 @@ const App = () => {
 
   const persistCustomZones = React.useCallback(async (path: string) => {
     if (!customZonesDirty.current || !customZonesRef.current) return;
-    await saveCustomZones(customZonesPath(path), customZonesRef.current);
+    await saveServerZones(path, customZonesRef.current);
     customZonesDirty.current = false;
   }, []);
 
@@ -590,7 +590,7 @@ const App = () => {
 
   const { customZones: huntZones, setCustomZones: setHuntZones } = useMapCustomZones(
     active ? { id: active.id, path: active.path } : null,
-    huntZonesPath
+    loadHuntZones
   );
   huntZonesRef.current = huntZones;
 
@@ -935,6 +935,12 @@ const App = () => {
     mapHighlightRef.current?.(x, y, z, clientId);
   };
 
+  const gotoZone = (id: number) => {
+    const focus = layerZones && customZoneFocus(layerZones, id, active?.floorZ ?? 7);
+    if (focus) gotoPosition(focus.x, focus.y, focus.z);
+    else handleStatus(`Zone ${id} has no tiles`);
+  };
+
   const pendingItemsRefresh = React.useRef(false);
 
   const refreshEverything = React.useCallback(() => {
@@ -1050,9 +1056,11 @@ const App = () => {
           panelId={id}
           towns={towns}
           houses={houses}
+          spawns={spawns}
           primary={isPrimary}
           dragHandle={handle}
           waypoints={waypoints}
+          onGotoZone={gotoZone}
           onGotoHouse={gotoHouse}
           customZones={layerZones}
           huntZones={huntZones}

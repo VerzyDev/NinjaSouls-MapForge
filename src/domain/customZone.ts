@@ -1,5 +1,6 @@
 export interface CustomZone {
   id: number;
+  name?: string;
   color?: string;
   minZ: number;
   maxZ: number;
@@ -34,6 +35,7 @@ export interface CustomZonePosition extends CustomZoneFloors {
 
 export interface CustomZoneFileEntry {
   id: number;
+  name?: string;
   color?: string;
   minZ?: number;
   maxZ?: number;
@@ -74,6 +76,31 @@ export const defaultCustomZoneColor = (id: number): string => hslToHex((id * 137
 export const customZoneColor = (zone: Pick<CustomZone, 'color'> | undefined, id: number): string =>
   zone?.color && HEX_COLOR.test(zone.color) ? zone.color : defaultCustomZoneColor(id);
 
+export const customZoneLabel = (zone: Pick<CustomZone, 'id' | 'name'>, prefix = 'Zone'): string =>
+  zone.name || `${prefix} ${zone.id}`;
+
+export type CustomZoneNames = Record<string, string>;
+
+export const customZoneNames = (zones: MapCustomZones): CustomZoneNames =>
+  Object.fromEntries(zones.list.filter((zone) => zone.name).map((zone) => [String(zone.id), zone.name!]));
+
+export const withoutCustomZoneNames = (zones: MapCustomZones): MapCustomZones => ({
+  list: zones.list.map(({ name: _name, ...zone }) => zone),
+  tiles: zones.tiles
+});
+
+export const withCustomZoneNames = (zones: MapCustomZones, names: unknown): MapCustomZones => {
+  if (!names || typeof names !== 'object') return zones;
+  const byId = names as Record<string, unknown>;
+  return {
+    list: zones.list.map((zone) => {
+      const name = byId[String(zone.id)];
+      return typeof name === 'string' && name.trim() ? { ...zone, name: name.trim() } : zone;
+    }),
+    tiles: zones.tiles
+  };
+};
+
 export const customZoneTileKey = (x: number, y: number) => y * XY + x;
 
 const unpackTileKey = (key: number) => ({ x: key % XY, y: Math.floor(key / XY) });
@@ -110,6 +137,13 @@ export const customZoneIdsOnFloor = (
 
 export const customZoneIdsAt = (zones: MapCustomZones | null | undefined, x: number, y: number, z: number): number[] =>
   zones ? customZoneIdsOnFloor(zones.tiles.get(customZoneTileKey(x, y)), z, customZoneRangeMasks(zones)) : [];
+
+export const customZoneMatcher = (zones: MapCustomZones | null | undefined, id: number) => {
+  if (!zones) return () => false;
+  const masks = customZoneRangeMasks(zones);
+  return ({ x, y, z }: { x: number; y: number; z: number }): boolean =>
+    customZoneIdsOnFloor(zones.tiles.get(customZoneTileKey(x, y)), z, masks).includes(id);
+};
 
 export const emptyMapCustomZones = (): MapCustomZones => ({ list: [], tiles: new Map() });
 
@@ -165,6 +199,16 @@ export function paintCustomZone(
     else tiles.delete(key);
   }
   return tiles ? { list: zones.list, tiles } : null;
+}
+
+export function paintCustomZoneFloors(
+  zones: MapCustomZones,
+  id: number,
+  floors: { z: number; xs: number[]; ys: number[] }[]
+): MapCustomZones | null {
+  let next = zones;
+  for (const { z, xs, ys } of floors) next = paintCustomZone(next, z, xs, ys, id, true, false) ?? next;
+  return next === zones ? null : next;
 }
 
 export function removeCustomZone(zones: MapCustomZones, id: number): MapCustomZones {
@@ -264,6 +308,7 @@ export function toCustomZoneFile(zones: MapCustomZones): CustomZoneFile {
   return {
     zone: sortCustomZones(zones.list).map((zone) => ({
       id: zone.id,
+      ...(zone.name ? { name: zone.name } : {}),
       ...(zone.color ? { color: zone.color } : {}),
       minZ: zone.minZ,
       maxZ: zone.maxZ,
@@ -312,7 +357,8 @@ export function fromCustomZoneFile(file: Partial<CustomZoneFile> | null | undefi
     if (!isValidCustomZoneRange(minZ, maxZ)) continue;
     seen.add(id);
     const color = typeof entry.color === 'string' && HEX_COLOR.test(entry.color) ? entry.color.toLowerCase() : undefined;
-    const zone: CustomZone = color ? { id, color, minZ, maxZ } : { id, minZ, maxZ };
+    const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+    const zone: CustomZone = { id, ...(name ? { name } : {}), ...(color ? { color } : {}), minZ, maxZ };
     zones.list.push(zone);
     ranges.set(id, customZoneRangeMask(zone));
     for (const a of Array.isArray(entry.areas) ? entry.areas : []) {
@@ -354,6 +400,39 @@ export function customZoneTilesOnFloor(zones: MapCustomZones, id: number, z: num
     }
   }
   return { xs, ys };
+}
+
+export function customZoneFocus(
+  zones: MapCustomZones,
+  id: number,
+  preferredZ: number
+): { x: number; y: number; z: number } | null {
+  const zone = customZoneById(zones, id);
+  if (!zone) return null;
+  const floors: (CustomZoneTileList & { z: number })[] = [];
+  for (let z = zone.minZ; z <= zone.maxZ; z++) {
+    const tiles = customZoneTilesOnFloor(zones, id, z);
+    if (tiles.xs.length) floors.push({ z, ...tiles });
+  }
+  if (!floors.length) return null;
+  const floor =
+    floors.find((f) => f.z === preferredZ) ??
+    [...floors].sort(
+      (a, b) => b.xs.length - a.xs.length || Math.abs(a.z - preferredZ) - Math.abs(b.z - preferredZ)
+    )[0];
+  const { xs, ys, z } = floor;
+  const centerX = xs.reduce((sum, x) => sum + x, 0) / xs.length;
+  const centerY = ys.reduce((sum, y) => sum + y, 0) / ys.length;
+  let nearest = 0;
+  let nearestDistance = Infinity;
+  for (let i = 0; i < xs.length; i++) {
+    const distance = (xs[i] - centerX) ** 2 + (ys[i] - centerY) ** 2;
+    if (distance < nearestDistance) {
+      nearest = i;
+      nearestDistance = distance;
+    }
+  }
+  return { x: xs[nearest], y: ys[nearest], z };
 }
 
 export function connectedCustomZoneTiles(

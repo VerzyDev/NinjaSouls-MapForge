@@ -9,6 +9,7 @@ import { ZoneLayer, CustomZoneMode } from '~/usecase/context/ToolContext/types';
 import {
   CustomZone,
   MapCustomZones,
+  customZoneLabel,
   sortCustomZones,
   customZoneColor,
   nextCustomZoneId,
@@ -25,6 +26,7 @@ import EditZoneDialog from './EditZoneDialog';
 interface ZonesListProps {
   zones: MapCustomZones | null;
   onEdit: (next: MapCustomZones) => void;
+  onGoto: (id: number) => void;
 }
 
 const CUSTOM_ZONE_MODES: { mode: CustomZoneMode; label: string; help: string }[] = [
@@ -32,7 +34,7 @@ const CUSTOM_ZONE_MODES: { mode: CustomZoneMode; label: string; help: string }[]
   {
     mode: 'fill',
     label: 'Fill',
-    help: 'Fill: click a walkable tile to fill every walkable tile connected to it, plus the walls and trees inside. It stops at blocked tiles and at tiles already in this zone, so paint a line with the brush to close a gap. Ctrl-click erases the connected part of the zone.'
+    help: 'Fill: click a walkable tile to fill every walkable tile connected to it. It stops at blocked tiles and at tiles already in this zone, so paint a line with the brush to close a gap. Ctrl-click erases the connected part of the zone.'
   },
   {
     mode: 'polygon',
@@ -46,7 +48,7 @@ const ZONE_LAYERS: { layer: ZoneLayer; label: string; help: string }[] = [
   { layer: 'hunt', label: 'Hunt', help: 'Hunt zones: editor only, saved next to the map and never loaded by the server. Used by Generator - Hunt.' }
 ];
 
-const ZonesList = ({ zones, onEdit }: ZonesListProps) => {
+const ZonesList = ({ zones, onEdit, onGoto }: ZonesListProps) => {
   const {
     activeTool,
     activeCustomZoneId,
@@ -67,7 +69,9 @@ const ZonesList = ({ zones, onEdit }: ZonesListProps) => {
 
   const list = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    return sortCustomZones(zones?.list ?? []).filter((z) => !q || String(z.id).includes(q));
+    return sortCustomZones(zones?.list ?? []).filter(
+      (z) => !q || String(z.id).includes(q) || z.name?.toLowerCase().includes(q)
+    );
   }, [zones, query]);
 
   const selectZone = (id: number) => {
@@ -170,8 +174,9 @@ const ZonesList = ({ zones, onEdit }: ZonesListProps) => {
         </div>
         <span className="px-0.5 text-[10px] text-muted-foreground">{CUSTOM_ZONE_MODES.find((o) => o.mode === customZoneMode)?.help}</span>
         <span className="px-0.5 text-[10px] text-muted-foreground">
-          Ctrl removes, Shift-drag paints a box, Alt-click selects the zone of a tile. All floors applies to every floor of
-          the zone&apos;s range; This floor only to the current one, for exceptions. A tile holds one zone per floor:
+          Ctrl removes, Shift-drag paints a box, Alt-click selects the zone of a tile. Only walkable tiles are painted: walls,
+          stairs and other blocked tiles are skipped. All floors applies to every floor of the zone&apos;s range; This floor
+          only to the current one, for exceptions. A tile holds one zone per floor:
           painting another zone replaces it. Saved to the map&apos;s -zones folder.
         </span>
       </div>
@@ -184,13 +189,15 @@ const ZonesList = ({ zones, onEdit }: ZonesListProps) => {
             <div
               key={z.id}
               onClick={() => selectZone(z.id)}
+              onDoubleClick={() => onGoto(z.id)}
               className={cn(
                 'group flex cursor-pointer items-center gap-1.5 px-2 py-1 text-xs',
                 activeCustomZoneId === z.id ? 'bg-primary/20 text-foreground' : 'hover:bg-accent'
               )}
             >
               <IconMapPin className="h-3 w-3 flex-shrink-0" style={{ color: customZoneColor(z, z.id) }} />
-              <span className="min-w-0 flex-1 truncate text-foreground">Zone {z.id}</span>
+              <span className="min-w-0 flex-1 truncate text-foreground">{customZoneLabel(z)}</span>
+              {z.name && <span className="flex-shrink-0 font-mono text-[9px] text-muted-foreground">#{z.id}</span>}
               <span className="flex-shrink-0 font-mono text-[9px] text-muted-foreground">
                 z{z.minZ === z.maxZ ? z.minZ : `${z.minZ}-${z.maxZ}`}
               </span>

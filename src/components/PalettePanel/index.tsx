@@ -3,6 +3,7 @@ import { X, FolderOpen } from 'lucide-react';
 
 import { Town } from '~/domain/map';
 import { cn } from '~/usecase/classNames';
+import { MapSpawns } from '~/domain/creature';
 import { LoadedSprite } from '~/domain/sprite';
 import { loadSprites } from '~/adapter/sprites';
 import { House, MapHouses } from '~/domain/house';
@@ -50,7 +51,9 @@ interface PalettePanelProps {
   onGotoHouse: (house: House) => void;
   customZones: MapCustomZones | null;
   huntZones: MapCustomZones | null;
+  spawns: MapSpawns | null;
   onEditCustomZones: (next: MapCustomZones) => void;
+  onGotoZone: (id: number) => void;
   onEditHuntZones: (next: MapCustomZones) => void;
   creatureTilesets?: PaletteTileset[];
   creatureNeedsPicker?: boolean;
@@ -87,7 +90,9 @@ const PalettePanel = ({
   onGotoHouse,
   customZones,
   huntZones,
+  spawns,
   onEditCustomZones,
+  onGotoZone,
   onEditHuntZones,
   creatureTilesets,
   creatureNeedsPicker,
@@ -453,9 +458,13 @@ const PalettePanel = ({
       ) : isHouses ? (
         <HousesList towns={towns} houses={houses} onGoto={onGotoHouse} onEdit={onEditHouses} />
       ) : isZones ? (
-        <ZonesList zones={customZones} onEdit={onEditCustomZones} />
+        <ZonesList zones={customZones} onGoto={onGotoZone} onEdit={onEditCustomZones} />
       ) : isGenerator ? (
-        <GeneratorView huntZones={huntZones} onEditHuntZones={onEditHuntZones} creatureTilesets={creatureTilesets} />
+        <GeneratorView
+          huntZones={huntZones}
+          onEditHuntZones={onEditHuntZones}
+          creatureTilesets={creatureTilesets}
+        />
       ) : (
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-2">
           {tiles.length === 0 ? (

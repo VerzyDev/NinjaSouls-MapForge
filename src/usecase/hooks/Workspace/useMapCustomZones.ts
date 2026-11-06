@@ -2,7 +2,7 @@ import React from 'react';
 
 import { hasSidecars } from '~/lib/map/sidecars';
 import { MapCustomZones } from '~/domain/customZone';
-import { loadCustomZones, customZonesPath } from '~/adapter/customZones';
+import { loadServerZones } from '~/adapter/customZones';
 
 interface CustomZoneSource {
   id: string;
@@ -16,7 +16,7 @@ export interface MapCustomZonesApi {
 
 export const useMapCustomZones = (
   active: CustomZoneSource | null,
-  pathFor: (mapPath: string) => string = customZonesPath
+  load: (mapPath: string) => Promise<MapCustomZones> = loadServerZones
 ): MapCustomZonesApi => {
   const [customZones, setCustomZones] = React.useState<MapCustomZones | null>(null);
 
@@ -26,13 +26,13 @@ export const useMapCustomZones = (
       return;
     }
     let cancelled = false;
-    void loadCustomZones(pathFor(active.path)).then((zones) => {
+    void load(active.path).then((zones) => {
       if (!cancelled) setCustomZones(zones);
     });
     return () => {
       cancelled = true;
     };
-  }, [active?.id, active?.path, pathFor]);
+  }, [active?.id, active?.path, load]);
 
   return { customZones, setCustomZones };
 };

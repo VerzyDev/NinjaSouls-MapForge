@@ -21,6 +21,7 @@ interface EditZoneDialogProps {
 
 const EditZoneDialog = ({ open, zone, takenIds, onOpenChange, onSave }: EditZoneDialogProps) => {
   const [idText, setIdText] = React.useState('');
+  const [name, setName] = React.useState('');
   const [minZText, setMinZText] = React.useState('');
   const [maxZText, setMaxZText] = React.useState('');
   const [color, setColor] = React.useState<string | undefined>(undefined);
@@ -28,6 +29,7 @@ const EditZoneDialog = ({ open, zone, takenIds, onOpenChange, onSave }: EditZone
   React.useEffect(() => {
     if (!open) return;
     setIdText(zone ? String(zone.id) : '');
+    setName(zone?.name ?? '');
     setMinZText(zone ? String(zone.minZ) : '');
     setMaxZText(zone ? String(zone.maxZ) : '');
     setColor(zone?.color);
@@ -51,7 +53,8 @@ const EditZoneDialog = ({ open, zone, takenIds, onOpenChange, onSave }: EditZone
 
   const save = () => {
     if (idError || rangeError) return;
-    onSave(zone.id, color ? { id, color, minZ, maxZ } : { id, minZ, maxZ });
+    const label = name.trim();
+    onSave(zone.id, { id, ...(label ? { name: label } : {}), ...(color ? { color } : {}), minZ, maxZ });
     onOpenChange(false);
   };
 
@@ -62,6 +65,10 @@ const EditZoneDialog = ({ open, zone, takenIds, onOpenChange, onSave }: EditZone
           <DialogTitle>Edit Zone</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3 p-4">
+          <label className="flex flex-col gap-1 text-xs font-medium text-foreground">
+            Name
+            <Input value={name} placeholder={`Zone ${zone.id}`} onChange={(e) => setName(e.target.value)} />
+          </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-foreground">
             Zone ID
             <Input type="number" value={idText} onChange={(e) => setIdText(e.target.value)} />
@@ -113,7 +120,8 @@ const EditZoneDialog = ({ open, zone, takenIds, onOpenChange, onSave }: EditZone
             </div>
           </label>
           <span className="text-[10px] text-muted-foreground">
-            The color is only used in Map Forge. Name and music are set per ID in the client (game_zones/zonelist.lua).
+            The name and color are only used in Map Forge, the name is never saved to the server files. In-game name and
+            music are set per ID in the client (game_zones/zonelist.lua).
           </span>
         </div>
         <DialogFooter>
