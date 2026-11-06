@@ -53,6 +53,27 @@ export function removeCreatureAt(spawns: MapSpawns, pos: Position): MapSpawns {
   );
 }
 
+export function removeCreatures(
+  spawns: MapSpawns,
+  doomed: (p: CreaturePlacement) => boolean,
+  sweepEmpty: (a: SpawnArea) => boolean = () => false
+): MapSpawns {
+  const removed = spawns.placements.filter(doomed);
+  const placements = spawns.placements.filter((p) => !doomed(p));
+  const areas = spawns.areas.filter((a) => {
+    const removable = sweepEmpty(a) || removed.some((p) => covers(a, p.x, p.y, p.z));
+    return !removable || placements.some((p) => covers(a, p.x, p.y, p.z));
+  });
+  if (removed.length === 0 && areas.length === spawns.areas.length) return spawns;
+  return buildMapSpawns(areas, placements);
+}
+
+export function removeCreaturesOnTiles(spawns: MapSpawns, z: number, xs: number[], ys: number[]): MapSpawns {
+  const tiles = new Set(xs.map((x, i) => `${x},${ys[i]}`));
+  const onTiles = (p: { x: number; y: number; z: number }) => p.z === z && tiles.has(`${p.x},${p.y}`);
+  return removeCreatures(spawns, onTiles, onTiles);
+}
+
 export function moveCreature(spawns: MapSpawns, from: Position, to: Position): MapSpawns {
   const placements = spawns.placements.map((p) => (samePos(p, from) ? { ...p, x: to.x, y: to.y, z: to.z } : p));
   return buildMapSpawns(spawns.areas, placements);
